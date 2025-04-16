@@ -1,26 +1,126 @@
-@import "tailwindcss";
+/* Remove the Google Fonts import */
+/* @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap'); */
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
+@layer base {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    /* Global color values */
+    --color-global-snow: #f9fafb;
+    --color-global-white: #ffffff;
+    --color-global-gray-alpha: rgba(0, 0, 0, 0.4);
+
+    /* Blue */
+    --color-global-blue-25: #f5f8ff;
+    --color-global-blue-50: #eff6ff;
+    --color-global-blue-100: #dbeafe;
+    --color-global-blue-400: #60a5fa;
+    --color-global-blue-500: #3b82f6;
+    --color-global-blue-600: #2563eb;
+    --color-global-blue-700: #1d4ed8;
+
+    /* Slate */
+    --color-global-slate-100: #f1f5f9;
+    --color-global-slate-400: #94a3b8;
+    --color-global-slate-700: #334155;
+    --color-global-slate-900: #0f172a;
+
+    /* Neutral */
+    --color-global-neutral-100: #f5f5f5;
+    --color-global-neutral-150: #ededed;
+    --color-global-neutral-200: #e5e5e5;
+    --color-global-neutral-300: #d4d4d4;
+
+    /* Red */
+    --color-global-red-50: #fef2f2;
+    --color-global-red-500: #ef4444;
+    --color-global-red-600: #dc2626;
+    --color-global-red-700: #b91c1c;
+    --color-global-red-900: #7f1d1d;
+
+    /* Amber */
+    --color-global-amber-50: #fffbeb;
+    --color-global-amber-500: #f59e0b;
+    --color-global-amber-600: #d97706;
+    --color-global-amber-700: #b45309;
+    --color-global-amber-900: #78350f;
+
+    /* Emerald */
+    --color-global-emerald-50: #ecfdf5;
+    --color-global-emerald-500: #10b981;
+    --color-global-emerald-600: #059669;
+    --color-global-emerald-900: #064e3b;
+
+    /* Violet */
+    --color-global-violet-100: #ede9fe;
+    --color-global-violet-500: #8b5cf6;
+  }
+
+  body {
+    @apply bg-bg-default text-text-default font-sans;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Text style tokens */
+@layer components {
+  .text-h1-desktop {
+    @apply text-5x-large font-bold;
+  }
+
+  .text-h1-mobile {
+    @apply text-4x-large font-bold;
+  }
+
+  .text-h2 {
+    @apply text-4x-large font-bold;
+  }
+
+  .text-h3 {
+    @apply text-3x-large font-semibold;
+  }
+
+  .text-h4 {
+    @apply text-2x-large font-semibold;
+  }
+
+  .text-lead {
+    @apply text-extra-large font-medium;
+  }
+
+  /* Fix the syntax by adding space between arbitrary values */
+  .text-large {
+    font-size: 1.125rem;
+    line-height: 1.2;
+  }
+
+  .text-p {
+    @apply text-base;
+  }
+
+  .text-blockquote {
+    font-size: 1.125rem;
+    line-height: 1.2;
+    font-style: italic;
+  }
+
+  .text-list {
+    font-size: 1.125rem;
+    line-height: 1.2;
+  }
+
+  .text-muted {
+    @apply text-small text-text-lighter;
+  }
+
+  .text-small {
+    font-size: 0.875rem;
+    line-height: 1.5;
+  }
+
+  .text-extra-small {
+    font-size: 0.75rem;
+    line-height: 1.5;
+  }
 }

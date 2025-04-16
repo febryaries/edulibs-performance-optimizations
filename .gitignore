@@ -12,17 +12,26 @@
 
 # testing
 /coverage
+/cypress/videos
+/cypress/screenshots
 
 # next.js
 /.next/
 /out/
+.next-env.local
 
 # production
 /build
+/dist
 
 # misc
 .DS_Store
 *.pem
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env
 
 # debug
 npm-debug.log*
@@ -30,8 +39,16 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# IDE specific files
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+.history
+*.sublime-project
+*.sublime-workspace
 
 # vercel
 .vercel
@@ -39,3 +56,24 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# PWA files
+public/sw.js
+public/workbox-*.js
+public/worker-*.js
+public/sw.js.map
+public/workbox-*.js.map
+public/worker-*.js.map
+
+# Supabase
+.supabase/
+
+# Local development files
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Logs
+logs
+*.log
