@@ -32,12 +32,12 @@ export function Footer({
     return (
       <footer className={cn("w-full border-t border-gray-200 py-4", className)}>
         <div className="mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
-            <div className="text-sm text-gray-500">© {copyrightYear}</div>
+          <div className="flex flex-col sm:flex-row justify-between items-center">
+            <div className="text-sm text-gray-500 mb-4 sm:mb-0">© {copyrightYear}</div>
 
             {navItems.length > 0 && (
-              <nav aria-label="Footer Navigation" className="mt-4 sm:mt-0">
-                <ul className="flex flex-wrap gap-6">
+              <nav aria-label="Footer Navigation">
+                <ul className="flex flex-wrap justify-center sm:justify-end gap-4 sm:gap-6">
                   {navItems.map((item) => (
                     <li key={item.href}>
                       {item.external ? (

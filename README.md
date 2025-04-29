@@ -78,3 +78,6 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 
 
 supabase gen types typescript --linked --schema=public > src/utils/database.types.ts
+
+
+https://docs.google.com/spreadsheets/d/1HCBXOACFLWXUnqPEyVxR-uGC8ZXtY3weQzENy-sJX_0/edit?usp=sharing

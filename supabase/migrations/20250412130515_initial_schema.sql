@@ -1,25 +1,10 @@
 -- Custom types
 CREATE TYPE public.resource_status AS ENUM ('DRAFT', 'SUBMITTED', 'IN_REVIEW', 'CONFORMABLE', 'UNCONFORMABLE');
 CREATE TYPE public.user_role AS ENUM ('ADMINISTRATOR', 'MODERATOR', 'FORMATOR', 'EVALUATOR', 'STUDENT');
-CREATE TYPE public.user_status AS ENUM ('ACTIVE', 'INACTIVE', 'SUSPENDED');
+CREATE TYPE public.user_status AS ENUM ('ACTIVE', 'INACTIVE', 'SUSPENDED','INVITED');
 CREATE TYPE public.group_member_role AS ENUM ('OWNER', 'ADMIN', 'MEMBER');
-CREATE TYPE public.evaluation_status AS ENUM ('CONFORMABLE', 'UNCONFORMABLE');
-
--- USERS
-CREATE TABLE public.users (
-  id            uuid REFERENCES auth.users NOT NULL PRIMARY KEY,
-  username      text NOT NULL,
-  first_name    text,
-  last_name     text,
-  email         text,
-  avatar_url    text,
-  role          user_role DEFAULT 'STUDENT'::public.user_role,
-  status        user_status DEFAULT 'ACTIVE'::public.user_status,
-  created_at    timestamp WITH time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
-  updated_at    timestamp WITH time zone DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-COMMENT ON TABLE public.users IS 'Profile data for each user.';
-COMMENT ON COLUMN public.users.id IS 'References the internal Supabase Auth user.';
+CREATE TYPE public.evaluation_status AS ENUM ('CONFORMABLE', 'UNCONFORMABLE', 'IN_PROGRESS');
+CREATE TYPE public.notification_status AS ENUM ('READ', 'UNREAD');
 
 -- EDUCATIONAL LEVELS
 CREATE TABLE public.educational_levels (
@@ -31,6 +16,25 @@ CREATE TABLE public.educational_levels (
   updated_at    timestamp WITH time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 COMMENT ON TABLE public.educational_levels IS 'Educational levels like Primary, Secondary, etc.';
+
+-- USERS
+CREATE TABLE public.users (
+  id            uuid REFERENCES auth.users NOT NULL PRIMARY KEY,
+  first_name    text,
+  last_name     text,
+  email         text,
+  avatar_url    text,
+  role          user_role DEFAULT 'STUDENT'::public.user_role,
+  status        user_status DEFAULT 'ACTIVE'::public.user_status,
+  education_level_id integer REFERENCES public.educational_levels(id),
+  created_at    timestamp WITH time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
+  updated_at    timestamp WITH time zone DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+COMMENT ON TABLE public.users IS 'Profile data for each user.';
+COMMENT ON COLUMN public.users.id IS 'References the internal Supabase Auth user.';
+COMMENT ON COLUMN public.users.education_level_id IS 'Reference to the educational level of the user';
+
+
 
 -- CLASSES
 CREATE TABLE public.classes (
@@ -112,6 +116,7 @@ comment on table public.specific_competencies is 'Specific competencies for each
 -- RESOURCES
 CREATE TABLE public.resources (
   id            uuid DEFAULT extensions.uuid_generate_v4() PRIMARY KEY,
+  serial_number serial unique,
   title         text NOT NULL,
   description   text,
   url           text,
@@ -121,10 +126,25 @@ CREATE TABLE public.resources (
   user_id       uuid REFERENCES public.users NOT NULL,
   author_id     uuid REFERENCES public.users,
   mentor_id     uuid REFERENCES public.users,
+  evaluator_id  uuid REFERENCES public.users,
+  discipline_id integer REFERENCES public.disciplines,
+  specific_competency_id integer REFERENCES public.specific_competencies,
+  class_id      integer REFERENCES public.classes,
+  link          text,
+  durata        text,
+  comentarii    text,
+  aggregate     text,
   created_at    timestamp WITH time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
   updated_at    timestamp WITH time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+COMMENT ON COLUMN resources.serial_number IS 'Unique sequential number of the resource in the system';
 COMMENT ON TABLE public.resources IS 'Educational resources created by users.';
+COMMENT ON COLUMN public.resources.discipline_id IS 'Reference to the discipline this resource belongs to';
+COMMENT ON COLUMN public.resources.link IS 'External link to the resource content';
+COMMENT ON COLUMN public.resources.specific_competency_id IS 'Reference to the specific competence this resource belongs to';
+COMMENT ON COLUMN public.resources.class_id IS 'Reference to the class this resource belongs to';
+COMMENT ON COLUMN public.resources.aggregate IS 'Aggregated text content for resource search and filtering';
+COMMENT ON COLUMN public.resources.evaluator_id IS 'Reference to the evaluator who evaluated this resource';
 
 -- RESOURCE_COMPETENCIES
 create table public.resource_competencies (
@@ -198,14 +218,26 @@ create table public.resource_evaluations (
   id                      uuid default extensions.uuid_generate_v4() primary key,
   resource_id             uuid references public.resources not null,
   user_id                 uuid references public.users not null,
+  evaluator_id            uuid references public.users not null,
   concordance_comment     text,
   relevance_comment       text,
   accessibility_comment   text,
   correctness_comment     text,
   value_comment           text,
   quality_comment         text,
+  specific_competence_comment text,
+  description_comment     text,
+  duration_comment        text,
+  link_comment            text,
+  comment_comment         text,
   feedback                text,
   status                  evaluation_status,
+  concordance_ok          boolean default false,
+  relevance_ok            boolean default false,
+  accessibility_ok        boolean default false,
+  correctness_ok          boolean default false,
+  value_ok                boolean default false,
+  quality_ok              boolean default false,
   created_at              timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at              timestamp with time zone default timezone('utc'::text, now()) not null,
   unique(resource_id, user_id)
@@ -218,6 +250,19 @@ comment on column public.resource_evaluations.correctness_comment is 'Comments o
 comment on column public.resource_evaluations.value_comment is 'Comments on educational value';
 comment on column public.resource_evaluations.quality_comment is 'Comments on design and presentation quality';
 comment on column public.resource_evaluations.status is 'Overall evaluation status (CONFORMABLE or UNCONFORMABLE)';
+COMMENT ON COLUMN public.resource_evaluations.specific_competence_comment IS 'Comments on the specific competence field';
+COMMENT ON COLUMN public.resource_evaluations.description_comment IS 'Comments on the description field';
+COMMENT ON COLUMN public.resource_evaluations.duration_comment IS 'Comments on the duration field';
+COMMENT ON COLUMN public.resource_evaluations.link_comment IS 'Comments on the link field';
+COMMENT ON COLUMN public.resource_evaluations.comment_comment IS 'General comments';
+COMMENT ON COLUMN public.resource_evaluations.concordance_ok IS 'Indicates if the resource meets concordance criteria';
+COMMENT ON COLUMN public.resource_evaluations.relevance_ok IS 'Indicates if the resource meets relevance criteria';
+COMMENT ON COLUMN public.resource_evaluations.accessibility_ok IS 'Indicates if the resource meets accessibility criteria';
+COMMENT ON COLUMN public.resource_evaluations.correctness_ok IS 'Indicates if the resource meets correctness criteria';
+COMMENT ON COLUMN public.resource_evaluations.value_ok IS 'Indicates if the resource meets value criteria';
+COMMENT ON COLUMN public.resource_evaluations.quality_ok IS 'Indicates if the resource meets quality criteria';
+
+ALTER TABLE resource_evaluations DROP CONSTRAINT IF EXISTS resource_evaluations_resource_id_user_id_key;
 
 -- USER FAVORITES
 CREATE TABLE public.user_favorites (
@@ -229,36 +274,32 @@ CREATE TABLE public.user_favorites (
 );
 COMMENT ON TABLE public.user_favorites IS 'User favorite resources.';
 
--- Enable Row Level Security on all tables
-alter table public.users enable row level security;
-alter table public.educational_levels enable row level security;
-alter table public.classes enable row level security;
-alter table public.curricular_areas enable row level security;
-alter table public.domains enable row level security;
-alter table public.disciplines enable row level security;
-alter table public.discipline_class enable row level security;
-alter table public.general_competencies enable row level security;
-alter table public.specific_competencies enable row level security;
-alter table public.resources enable row level security;
-alter table public.resource_competencies enable row level security;
-alter table public.resource_tags enable row level security;
-alter table public.groups enable row level security;
-alter table public.group_members enable row level security;
-alter table public.group_resources enable row level security;
-alter table public.comments enable row level security;
-alter table public.resource_evaluations enable row level security;
-alter table public.user_favorites enable row level security;
+-- Create notifications table
+CREATE TABLE public.notifications (
+  id            uuid DEFAULT extensions.uuid_generate_v4() PRIMARY KEY,
+  title         text NOT NULL,
+  description   text,
+  user_id       uuid REFERENCES public.users(id) NOT NULL,
+  created_at    timestamp WITH time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
+  updated_at    timestamp WITH time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
+  status        notification_status DEFAULT 'UNREAD'::public.notification_status NOT NULL
+);
 
+-- Add comments
+COMMENT ON TABLE public.notifications IS 'User notifications for system events and updates';
+COMMENT ON COLUMN public.notifications.id IS 'Unique identifier for the notification';
+COMMENT ON COLUMN public.notifications.title IS 'Short title of the notification';
+COMMENT ON COLUMN public.notifications.description IS 'Detailed description of the notification';
+COMMENT ON COLUMN public.notifications.user_id IS 'User who should receive this notification';
+COMMENT ON COLUMN public.notifications.created_at IS 'Timestamp when the notification was created';
+COMMENT ON COLUMN public.notifications.updated_at IS 'Timestamp when the notification was last updated';
+COMMENT ON COLUMN public.notifications.status IS 'Status of the notification: READ or UNREAD';
 
--- Column-level privileges for users table
--- First, revoke the table-level UPDATE privilege from authenticated users
-REVOKE UPDATE ON TABLE public.users FROM authenticated;
+-- Create index on user_id for faster lookups
+CREATE INDEX notifications_user_id_idx ON public.notifications(user_id);
 
--- Grant column-level UPDATE privileges for profile fields that users can update themselves
-GRANT UPDATE (username, first_name, last_name, avatar_url) ON TABLE public.users TO authenticated;
+-- Create index on status for filtering
+CREATE INDEX notifications_status_idx ON public.notifications(status);
 
--- ADMINISTRATOR can update all fields
-GRANT UPDATE ON TABLE public.users TO anon, authenticated;
-
--- FORMATOR can update user roles and status
-GRANT UPDATE (role, status) ON TABLE public.users TO authenticated;
+-- Create index on created_at for sorting
+CREATE INDEX notifications_created_at_idx ON public.notifications(created_at DESC);

@@ -25,8 +25,8 @@ interface CurrencyInputProps extends Omit<React.InputHTMLAttributes<HTMLInputEle
   label?: string
   description?: string
   error?: string
-  onChange?: (value: { currency: string; amount: number | undefined }) => void
   value?: { currency: string; amount: number | undefined }
+  onChange?: (value: { currency: string; amount: number | undefined }) => void
 }
 
 export function CurrencyInput({

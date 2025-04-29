@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { Database } from "./database.types";
 
 /**
  * Redirects to a specified path with an encoded message as a query parameter.

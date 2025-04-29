@@ -1,276 +1,392 @@
 "use client"
 
-import {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  ReactNode,
-} from "react"
-import { useRouter } from "next/navigation"
-import { createClient } from "@/utils/supabase/client"
-import { useToast } from "@/components/ui/use-toast"
+import { useState, useEffect, createContext, useContext, ReactNode } from "react"
+import { useSupabaseBrowser } from "@/utils/supabase/client"
 import { type User, type Session } from "@supabase/supabase-js"
+import { Profile, ProfileInsert, ProfileUpdate, useUsersCrud } from "@/hooks/use-controllers"
+import { adminSignUpAction, deleteUserAction, forgotPasswordAction } from "./auth-actions"
+import { UserRole, UserStatus } from "./auth-context-old"
+import { toast } from "@/components/ui/use-toast"
 
-export type UserRole = "ADMINISTRATOR" | "MODERATOR" | "FORMATOR" | "EVALUATOR" | "STUDENT"
-export type EducationLevel = "primar" | "gimnazial" | "liceal"
 
-type RegistrationData = {
-  firstName?: string
-  lastName?: string
-  email?: string
-  password?: string
-  role?: UserRole
-  educationLevelId?: number
-}
 
 type AuthContextType = {
-  user: User | null
-  isInitialized: boolean
-  isLoading: boolean
-  currentStep: number
-  setCurrentStep: (step: number) => void
-  registrationData: RegistrationData
-  updateRegistrationData: (data: Partial<RegistrationData>) => void
-  register: () => Promise<{ user: User | null; session: Session | null } | undefined>
-  login: (email: string, password: string) => Promise<{ user: User | null; session: Session | null } | undefined>
-  loginWithGoogle: () => Promise<{ provider: string; url: string } | undefined>
-  logout: () => Promise<void>
-  resetPassword: (email: string) => Promise<boolean | undefined>
+    session: Session | null
+    user: User | null
+    profile: Profile | null
+    isLoading: boolean;
+    isInitialized: boolean;
+    signUpWithEmail: (email: string, password: string) => Promise<void>;
+    forgotPassword: (email: string) => Promise<void>;
+    updateUserStatus: (userId: string, status: UserStatus) => Promise<boolean>
+    inviteUser: (email: string, role: UserRole) => Promise<boolean>
+    removeInvitedUser: (userId: string) => Promise<boolean>
+    resendInvitation: (email: string) => Promise<boolean>
+    completeProfile: (data: ProfileUpdate) => Promise<boolean>
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<User | null>(null)
-  const [isInitialized, setIsInitialized] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-  const [currentStep, setCurrentStep] = useState(1)
-  const [registrationData, setRegistrationData] = useState<RegistrationData>({
-    email: "",
-    password: "",
-    firstName: "",
-    lastName: "",
-    role: undefined,
-    educationLevelId: undefined
-  })
-  const router = useRouter()
-  const { toast } = useToast()
-  const supabase = createClient()
+const AuthContext = createContext<AuthContextType | null>(null)
 
-  // Update registration data
-  const updateRegistrationData = (data: Partial<RegistrationData>) => {
-    setRegistrationData((prev) => ({ ...prev, ...data }))
-  }
+export function AuthProvider({ children }: { children: ReactNode }) {
 
-  // Register a new user
-  const register = async () => {
-    setIsLoading(true)
-    try {
-      // 0. Check if this is the first user
-      let isFirstUser = false;
-      const { count, error: countError } = await supabase
-        .from('users')
-        .select('id', { count: 'exact', head: true });
-      if (countError) throw countError;
-      if ((count ?? 0) === 0) {
-        isFirstUser = true;
-      }
+    const supabase = useSupabaseBrowser();
+    const [session, setSession] = useState<Session | null>(null)
+    const [user, setUser] = useState<User | null>(null)
+    const [isLoading, setIsLoading] = useState(true)
+    const [isInitialized, setIsInitialized] = useState(false)
 
-      // 1. Register the user with Supabase Auth FIRST
-      const roleToSet = isFirstUser ? "ADMINISTRATOR" : registrationData.role;
-      const { data, error } = await supabase.auth.signUp({
-        email: registrationData.email!,
-        password: registrationData.password!,
-        options: {
-          data: {
-            first_name: registrationData.firstName,
-            last_name: registrationData.lastName,
-            role: roleToSet,
-            education_level_id: registrationData.educationLevelId,
-          },
-          emailRedirectTo: `${window.location.origin}/auth/callback?redirect_to=/dashboard`,
-        },
-      })
+    const { useById, useCreate, useUpdate, useDelete } = useUsersCrud()
+    const createUserMutation = useCreate
+    const updateUserMutation = useUpdate
+    const deleteUserMutation = useDelete
 
-      if (error) throw error
+    const { data: profile } = useById(session?.user?.id || "") as { data: Profile | null };
 
-      // 2. Insert the user in the users table with the correct UUID
-      const userId = data.user?.id
-      if (userId) {
-        const { error: userInsertError } = await supabase
-          .from('users')
-          .insert({
-            id: userId,
-            email: registrationData.email,
-            first_name: registrationData.firstName,
-            last_name: registrationData.lastName,
-            role: roleToSet,
-            education_level_id: registrationData.educationLevelId,
-            username: registrationData.email,
-          })
-
-        if (userInsertError) throw userInsertError
-      }
-
-      toast({
-        title: "Cont creat cu succes",
-        description: "Verifică-ți email-ul pentru a confirma contul.",
-      })
-
-      return data
-    } catch (error: any) {
-      toast({
-        title: "Eroare",
-        description: error.message || "A apărut o eroare la crearea contului.",
-        variant: "destructive",
-      })
-      throw error
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  // Login with email and password
-  const login = async (email: string, password: string) => {
-    setIsLoading(true)
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
-
-      if (error) throw error
-
-      setUser(data.user)
-      return data
-    } catch (error: any) {
-      toast({
-        title: "Eroare",
-        description: "Autentificare eșuată. Verifică datele și încearcă din nou.",
-        variant: "destructive",
-      })
-      throw error
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  // Login with Google
-  const loginWithGoogle = async () => {
-    try {
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback?redirect_to=/dashboard`,
-        },
-      })
-
-      if (error) throw error
-
-      return data
-    } catch (error: any) {
-      toast({
-        title: "Eroare",
-        description: error.message || "A apărut o eroare la autentificare cu Google.",
-        variant: "destructive",
-      })
-      throw error
-    }
-  }
-
-  // Logout
-  const logout = async () => {
-    setIsLoading(true)
-    try {
-      const { error } = await supabase.auth.signOut()
-      if (error) throw error
-
-      setUser(null)
-      router.push("/sign-in")
-    } catch (error: any) {
-      toast({
-        title: "Eroare",
-        description: error.message || "A apărut o eroare la deconectare.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  // Reset password
-  const resetPassword = async (email: string) => {
-    setIsLoading(true)
-    try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth/callback?redirect_to=/auth/forgot-password`,
-      })
-
-      if (error) throw error
-
-      return true
-    } catch (error: any) {
-      toast({
-        title: "Eroare",
-        description: error.message || "A apărut o eroare la resetarea parolei.",
-        variant: "destructive",
-      })
-      throw error
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  // Check for existing session on mount
-  useEffect(() => {
     const initializeAuth = async () => {
-      try {
-        const { data } = await supabase.auth.getSession()
-        setUser(data.session?.user || null)
-      } catch (error) {
-        console.error("Error checking auth session:", error)
-      } finally {
-        setIsInitialized(true)
-      }
+        try {
+            const { data } = await supabase.auth.getSession()
+            setSession(data.session || null)
+            setUser(data.session?.user || null)
+        } catch (error) {
+            console.error("Error getting session:", error)
+        } finally {
+            setIsLoading(false)
+            setIsInitialized(true)
+        }
     }
 
-    initializeAuth()
+    useEffect(() => {
+        initializeAuth()
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+            setSession(session || null)
+            setUser(session?.user || null)
+        })
+        return () => {
+            subscription?.unsubscribe()
+        }
+    }, [])
 
-    // Set up auth state change listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setUser(session?.user || null)
-      }
-    )
 
-    return () => {
-      subscription.unsubscribe()
+    const signUpWithEmail = async (email: string, password: string) => {
+        const formData = new FormData();
+        formData.append("email", email);
+        formData.append("password", password);
+        await adminSignUpAction(formData);
     }
-  }, [])
 
-  const value = {
-    user,
-    isInitialized,
-    isLoading,
-    currentStep,
-    setCurrentStep,
-    registrationData,
-    updateRegistrationData,
-    register,
-    login,
-    loginWithGoogle,
-    logout,
-    resetPassword,
-  }
+    const forgotPassword = async (email: string) => {
+        const formData = new FormData();
+        formData.append("email", email);
+        await forgotPasswordAction(formData);
+    }
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+    // Update user status (activate/deactivate)
+    const updateUserStatus = async (userId: string, status: UserStatus) => {
+        setIsLoading(true)
+        try {
+            // Update the user status using the CRUD hook
+            await updateUserMutation.mutateAsync({
+                id: userId,
+                record: {
+                    status,
+                    updated_at: new Date().toISOString()
+                }
+            })
+
+            const statusText = status === 'ACTIVE' ? 'activat' : status === 'INACTIVE' ? 'dezactivat' : status
+
+            toast({
+                title: "Status actualizat",
+                description: `Utilizatorul a fost ${statusText} cu succes.`,
+            })
+
+            return true
+        } catch (error: any) {
+            console.error("Status update error:", error)
+            toast({
+                title: "Eroare",
+                description: error.message || "A apărut o eroare la actualizarea statusului.",
+                variant: "destructive",
+            })
+            return false
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
+    const inviteUser = async (email: string, role: UserRole) => {
+        setIsLoading(true)
+        try {
+            // First, check if the user already exists
+            const { data: existingUsers, error: checkError } = await supabase
+                .from('users')
+                .select('id')
+                .eq('email', email)
+                .limit(1)
+
+            if (checkError) throw checkError
+
+            if (existingUsers && existingUsers.length > 0) {
+                toast({
+                    title: "Utilizator existent",
+                    description: "Există deja un cont cu această adresă de email.",
+                    variant: "destructive",
+                })
+                return false
+            }
+
+            // Generate a random password for the initial account
+            const tempPassword = Math.random().toString(36).slice(2) + Math.random().toString(36).toUpperCase().slice(2)
+
+            // Create the user with Supabase Auth
+            const { data, error } = await supabase.auth.admin.createUser({
+                email,
+                password: tempPassword,
+                email_confirm: false,
+                user_metadata: {
+                    role,
+                }
+            })
+
+            if (error) {
+                // If admin API fails, fallback to regular signup with invitation email
+                const { data: signupData, error: signupError } = await supabase.auth.signUp({
+                    email,
+                    password: tempPassword,
+                    options: {
+                        data: {
+                            role,
+                        },
+                    },
+                })
+
+                if (signupError) throw signupError
+
+                // Insert the user in the users table using the CRUD hook
+                if (signupData.user?.id) {
+                    await createUserMutation.mutateAsync({
+                        id: signupData.user.id,
+                        email,
+                        role,
+                        status: 'INVITED' as UserStatus,
+                    } as ProfileInsert)
+                }
+            } else {
+                // If admin API succeeds, we still need to create the user record using the CRUD hook
+                if (data?.user?.id) {
+                    await createUserMutation.mutateAsync({
+                        id: data.user.id,
+                        email,
+                        role,
+                        status: 'INVITED' as UserStatus,
+                    } as ProfileInsert)
+                }
+
+                // Send password reset email to allow user to set their password
+                const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+                    redirectTo: `${window.location.origin}/sign-up/invite?user_id=${data?.user?.id}`,
+                })
+
+                if (resetError) throw resetError
+            }
+
+            toast({
+                title: "Invitație trimisă",
+                description: "Utilizatorul a fost invitat cu succes.",
+            })
+
+            return true
+        } catch (error: any) {
+            console.error("Invite error:", error)
+            toast({
+                title: "Eroare",
+                description: error.message || "A apărut o eroare la invitarea utilizatorului.",
+                variant: "destructive",
+            })
+            return false
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
+
+    // Remove invited user
+    const removeInvitedUser = async (userId: string) => {
+        setIsLoading(true)
+        try {
+            // Remove the user from the users table using the CRUD hook
+            await deleteUserMutation.mutateAsync(userId)
+
+            // Remove the user from the auth table
+            const formData = new FormData();
+            formData.append("userId", userId);
+            await deleteUserAction(formData);
+
+            toast({
+                title: "Utilizator eliminat",
+                description: "Utilizatorul a fost eliminat cu succes.",
+            })
+
+            return true
+        } catch (error: any) {
+            console.error("Remove invited user error:", error)
+            toast({
+                title: "Eroare",
+                description: error.message || "A apărut o eroare la eliminarea utilizatorului.",
+                variant: "destructive",
+            })
+            return false
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
+    // Resend invitation email
+    const resendInvitation = async (email: string) => {
+        setIsLoading(true)
+        try {
+            // Check if user exists and is in INVITED status using the CRUD hook
+            const { data: users, error: checkError } = await supabase
+                .from('users')
+                .select('id, email, role, status')
+                .eq('email', email)
+                .eq('status', 'INVITED')
+                .limit(1)
+
+            if (checkError) throw checkError
+
+            if (!users || users.length === 0) {
+                toast({
+                    title: "Utilizator negăsit",
+                    description: "Nu s-a găsit niciun utilizator invitat cu acest email.",
+                    variant: "destructive",
+                })
+                return false
+            }
+
+            const userId = users[0].id
+
+            // Send password reset email to allow user to set their password
+            const { error } = await supabase.auth.resetPasswordForEmail(email, {
+                redirectTo: `${window.location.origin}/sign-up/invite?user_id=${userId}`,
+            })
+
+            if (error) throw error
+
+            toast({
+                title: "Invitație retrimisă",
+                description: "Un nou email de invitație a fost trimis utilizatorului.",
+            })
+
+            return true
+        } catch (error: any) {
+            console.error("Resend invitation error:", error)
+            toast({
+                title: "Eroare",
+                description: error.message || "A apărut o eroare la retrimiterea invitației.",
+                variant: "destructive",
+            })
+            return false
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
+
+    const completeProfile = async (data: ProfileUpdate) => {
+        setIsLoading(true)
+        try {
+            if (!user) throw new Error("Utilizatorul nu este autentificat")
+
+
+            // Update the user profile
+            const { error: profileError } = await supabase
+                .from('users')
+                .update({
+                    id: user.id,
+                    first_name: data.first_name,
+                    last_name: data.last_name,
+                    education_level_id: data.education_level_id,
+                    status: 'ACTIVE',
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', user.id)
+
+            if (profileError) throw profileError
+
+            toast({
+                title: "Profil completat",
+                description: "Profilul tău a fost actualizat cu succes.",
+            })
+
+            return true
+        } catch (error: any) {
+            toast({
+                title: "Eroare",
+                description: error.message || "A apărut o eroare la actualizarea profilului.",
+                variant: "destructive",
+            })
+            return false
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
+
+
+    const value = {
+        session,
+        user,
+        profile,
+        isLoading,
+        isInitialized,
+        inviteUser,
+        signUpWithEmail,
+        forgotPassword,
+        updateUserStatus,
+        removeInvitedUser,
+        resendInvitation,
+        completeProfile
+    }
+
+
+    return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+};
+
+
+
+
+export function useAuth() {
+    const context = useContext(AuthContext)
+    if (context === null) {
+        throw new Error("useAuth must be used within an AuthProvider")
+    }
+    return context
 }
 
-export const useAuth = () => {
-  const context = useContext(AuthContext)
-  if (context === undefined) {
-    throw new Error("useAuth must be used within an AuthProvider")
-  }
-  return context
+// RBAC utility functions
+export function isOwner(user: User | null, resource: any) {
+    if (!user) return false
+    return user.id === resource?.user_id
+}
+
+export function isAdmin(user: User | null) {
+    if (!user) return false
+    return user.user_metadata.role === "ADMINISTRATOR"
+}
+
+export function isModerator(user: User | null) {
+    if (!user) return false
+    return user.user_metadata.role === "MODERATOR"
+}
+
+export function isEvaluator(user: User | null) {
+    if (!user) return false
+    return user.user_metadata.role === "EVALUATOR"
+}
+
+export function isStudent(user: User | null) {
+    if (!user) return false
+    return user.user_metadata.role === "STUDENT"
 }

@@ -4,6 +4,7 @@ import * as React from "react"
 import * as SheetPrimitive from "@radix-ui/react-dialog"
 import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
+import { useMediaQuery } from "@/hooks/use-media-query"
 
 const Sheet = SheetPrimitive.Root
 
@@ -51,30 +52,42 @@ interface SheetContentProps
   extends React.ComponentPropsWithoutRef<typeof SheetPrimitive.Content>,
     VariantProps<typeof sheetVariants> {
   fullScreen?: boolean
+  mobileFullScreen?: boolean
 }
 
 const SheetContent = React.forwardRef<React.ElementRef<typeof SheetPrimitive.Content>, SheetContentProps>(
-  ({ side = "right", fullScreen = false, className, children, ...props }, ref) => (
-    <SheetPortal>
-      <SheetOverlay />
-      <SheetPrimitive.Content
-        ref={ref}
-        className={cn(
-          fullScreen
-            ? "fixed inset-0 z-50 w-full bg-white data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
-            : cn(sheetVariants({ side }), "w-[640px]"),
-          "bg-[#FFF] shadow-[0px_-1px_2px_0px_rgba(0,0,0,0.04),0px_0.5px_1px_0px_rgba(0,0,0,0.04),0px_4px_8px_0px_rgba(0,0,0,0.08)]",
-          side === "right" && !fullScreen && "data-[state=open]:slide-in-from-right data-[state=closed]:slide-out-to-right",
-          className,
-        )}
-        {...props}
-      >
-        {/* Add visually hidden title for accessibility */}
-        <SheetPrimitive.Title className="sr-only">Sheet Content</SheetPrimitive.Title>
-        {children}
-      </SheetPrimitive.Content>
-    </SheetPortal>
-  ),
+  ({ side = "right", fullScreen = false, mobileFullScreen = true, className, children, ...props }, ref) => {
+    // Use the media query hook to detect mobile screens
+    const isMobile = useMediaQuery("(max-width: 768px)")
+
+    // Determine if we should show in fullscreen mode
+    // Either explicitly set to fullScreen or on mobile when mobileFullScreen is true
+    const isFullScreen = fullScreen || (isMobile && mobileFullScreen)
+
+    return (
+      <SheetPortal>
+        <SheetOverlay />
+        <SheetPrimitive.Content
+          ref={ref}
+          className={cn(
+            isFullScreen
+              ? "fixed inset-0 z-50 w-full bg-white data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
+              : cn(sheetVariants({ side }), isMobile ? "w-full max-w-full" : "w-[640px]"),
+            "bg-[#FFF] shadow-[0px_-1px_2px_0px_rgba(0,0,0,0.04),0px_0.5px_1px_0px_rgba(0,0,0,0.04),0px_4px_8px_0px_rgba(0,0,0,0.08)]",
+            side === "right" &&
+              !isFullScreen &&
+              "data-[state=open]:slide-in-from-right data-[state=closed]:slide-out-to-right",
+            className,
+          )}
+          {...props}
+        >
+          {/* Add visually hidden title for accessibility */}
+          <SheetPrimitive.Title className="sr-only">Sheet Content</SheetPrimitive.Title>
+          {children}
+        </SheetPrimitive.Content>
+      </SheetPortal>
+    )
+  },
 )
 SheetContent.displayName = SheetPrimitive.Content.displayName
 

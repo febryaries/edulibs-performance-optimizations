@@ -1,12 +1,11 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from "react"
-import { Check, ChevronDown, Circle, Plus, Loader2 } from "lucide-react"
+import { Check, ChevronDown, Circle, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { UsePaginatedHook } from "@/hooks/use-data-table"
-import { PaginationParams } from "@/lib/query-controller"
+import { PaginationParams, UsePaginatedHook } from "@/lib/query-controller"
 
 export interface FilterOption {
   value: string
@@ -154,14 +153,6 @@ export function FilterButton<T>({
     }
   }, [query?.isLoading, query?.isFetching, isHookMode])
 
-  // Debug cursor state
-  useEffect(() => {
-    if (isHookMode) {
-      console.log('Current page:', page)
-      console.log('Cursors array:', cursors)
-      console.log('Current pagination params:', paginationParams)
-    }
-  }, [page, cursors, paginationParams, isHookMode])
   
   // Handle scroll to load more
   const handleScroll = useCallback(() => {
@@ -183,13 +174,13 @@ export function FilterButton<T>({
         
         // Only update pagination params if we have a valid cursor
         if (cursor) {
-          console.log('Scroll loading more with cursor:', cursor)
+          console.log('[LOG] Scroll loading more with cursor:', cursor)
           setPaginationParams(prev => ({
             ...prev,
             cursor
           }))
         } else {
-          console.log('Scroll: No cursor available for page', nextPage)
+          console.log('[LOG] Scroll: No cursor available for page', nextPage)
         }
       }
     } catch (error) {
@@ -381,13 +372,13 @@ export function FilterButton<T>({
                   
                   // Only update pagination params if we have a valid cursor
                   if (cursor) {
-                    console.log('Loading more with cursor:', cursor)
+                    console.log('[LOG] Loading more with cursor:', cursor)
                     setPaginationParams(prev => ({
                       ...prev,
                       cursor
                     }))
                   } else {
-                    console.log('No cursor available for page', nextPage)
+                    console.log('[LOG] No cursor available for page', nextPage)
                   }
                 }}
               >

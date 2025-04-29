@@ -1,290 +1,380 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
-import { Check, ChevronDown, Search, Loader2 } from "lucide-react"
-import { Avatar } from "@/components/ui/avatar"
+import type React from "react"
+import { useState, useEffect, useRef, useMemo, useCallback } from "react"
+import { Check, Loader2, ChevronsUpDown, Search, X } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { QueryController } from "@/lib/query-controller"
+import type {
+  ForeignKeyRelationMap,
+  QueryFilter,
+  TableNames,
+  UsePaginatedHook,
+  WithRelations,
+} from "@/lib/query-controller"
+import { InView } from "react-intersection-observer"
+import { useInfiniteDataTable } from "@/hooks/use-infinite-data"
+import { Avatar } from "@/components/ui/avatar"
 
-export interface Option {
-  value: string
-  label: string
+// --- Helper: getNestedValue ---
+function getNestedValue(obj: any, path: string | number): any {
+  if (typeof path === "string" && path.includes(".")) {
+    return path.split(".").reduce((o, k) => (o ? o[k as keyof typeof o] : undefined), obj)
+  } else {
+    return obj?.[path as keyof typeof obj]
+  }
 }
 
-interface ControllerConfig<T> {
-  controller: QueryController<T, any>
-  valueField: keyof T
-  labelField: keyof T
-  pageSize?: number
-  customFilters?: Array<{
-    column: string
-    operator: 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'like' | 'ilike' | 'in' | 'is'
-    value: any
-  }>
-}
-
-interface SearchableDropdownProps<T = any> {
-  options?: Option[]
-  controller?: ControllerConfig<T>
-  value: string
-  onChange: (value: string) => void
+export interface SearchableDropdownProps<T, C extends TableNames, M extends ForeignKeyRelationMap<C>> {
+  useQueryHook: UsePaginatedHook<T>
   placeholder?: string
-  searchPlaceholder?: string
-  error?: string
-  className?: string
-  showAvatar?: boolean
+  emptyMessage?: string
+  /**
+   * Accepts either a key of T (flat property) or a dot-notated string for nested properties (e.g. "class.id").
+   */
+  valueField: string
+  /**
+   * Accepts either a key of T (flat property) or a dot-notated string for nested properties (e.g. "class.name").
+   */
+  labelField: string
+  /**
+   * Optional field for avatar url or initials
+   */
+  avatarField?: string
+  /**
+   * Mode of selection: 'single' or 'multiple'
+   */
+  mode?: "single" | "multiple"
+  /**
+   * For single mode: (value: T | null) => void
+   * For multiple mode: (value: T[]) => void
+   */
+  onChange: ((value: T | null) => void) | ((value: T[]) => void)
+  /**
+   * For single mode: any | null
+   * For multiple mode: T[]
+   */
+  value?: any | null | T[]
   disabled?: boolean
+  searchColumns?: string[]
+  pageSize?: number
+  className?: string
+  triggerClassName?: string
+  contentClassName?: string
+  renderItem?: (item: T, isSelected: boolean, onChange: (value: T | null) => void) => React.ReactNode
+  onOpenChange?: (open: boolean) => void
+  error?: string
+  /**
+   * Filters to be passed to the query. These will override or supplement UI filters.
+   */
+  filters?: QueryFilter[]
 }
 
-export function SearchableDropdown<T>({ 
-  options = [],
-  controller,
-  value,
+export function SearchableDropdown<
+  T extends WithRelations<C, M>,
+  C extends TableNames,
+  M extends ForeignKeyRelationMap<C>,
+>({
+  useQueryHook,
+  placeholder = "Select an item...",
+  emptyMessage = "No results found.",
+  valueField,
+  labelField,
+  avatarField,
+  mode = "single",
   onChange,
-  placeholder = "Select an option",
-  searchPlaceholder = "Search...",
-  error,
-  className,
-  showAvatar = false,
+  value = mode === "single" ? null : [],
   disabled = false,
-}: SearchableDropdownProps<T>) {
-  // Refs to prevent re-renders
-  const controllerRef = useRef<ControllerConfig<T> | undefined>(controller)
-  const optionsRef = useRef<Option[]>(options)
-  const initialRenderRef = useRef(true)
-  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  searchColumns = [],
+  pageSize = 10,
+  className,
+  triggerClassName,
+  contentClassName,
+  renderItem,
+  onOpenChange,
+  error,
+  filters,
+  ...props
+}: SearchableDropdownProps<T, C, M>) {
+  // Memoize initial params
+  const memoizedInitialParams = useMemo(
+    () => ({
+      pageSize,
+      searchTerm: "",
+      searchColumns,
+      filters,
+    }),
+    [pageSize, searchColumns, filters],
+  )
+
+  const { pageIndex, totalPages, searchTerm, setSearchTerm, query, goToNextPage, results, handleFiltersChanged } =
+    useInfiniteDataTable<T>(useQueryHook, memoizedInitialParams)
+
+  useEffect(() => {
+    const _filters: Record<string, any> = {}
+    for (const filter of filters ?? []) {
+      _filters[filter.column] = filter.value
+    }
+    console.log(_filters)
+    handleFiltersChanged(_filters)
+  }, [filters])
+
+  // UI State
+  const [open, setOpen] = useState(false)
+  const [isEndOfListInView, setIsEndOfListInView] = useState(false)
+
+  // Fetch more data when scrolling to the end
+  useEffect(() => {
+    if (isEndOfListInView && pageIndex < totalPages && (!query.isStale || !query.isRefetching || !query.isLoading)) {
+      goToNextPage()
+    }
+  }, [isEndOfListInView])
+
+  // Find the selected item in the results or set to undefined
+  const selectedItem = useMemo(() => {
+    if (mode === "single" && value !== null) {
+      // First try to find by direct comparison
+      const directMatch = results.find((item) => getNestedValue(item, valueField) === value)
+      if (directMatch) return directMatch
+
+      // If value is an object, try to match by valueField
+      if (typeof value === "object" && value !== null) {
+        const valueFieldValue = getNestedValue(value, valueField)
+        return results.find((item) => getNestedValue(item, valueField) === valueFieldValue)
+      }
+    }
+    return undefined
+  }, [mode, value, results, valueField])
+
+  const displayValue = selectedItem ? String(getNestedValue(selectedItem, labelField)) : ""
+
+  // For multiple mode, get the selected items
+  const selectedItems = mode === "multiple" && Array.isArray(value) ? (value as T[]) : []
+
+  // Helper function to check if an item is selected in multiple mode
+  const isItemSelected = (item: T) => {
+    if (mode === "single") {
+      return getNestedValue(item, valueField) === value
+    } else {
+      return selectedItems.some(
+        (selectedItem) => getNestedValue(selectedItem, valueField) === getNestedValue(item, valueField),
+      )
+    }
+  }
+
+  // Handle item selection
+  const handleItemSelect = (item: T) => {
+    if (mode === "single") {
+      const itemValue = getNestedValue(item, valueField);
+      (onChange as (value: T | null) => void)(itemValue)
+      setOpen(false)
+      if (onOpenChange) onOpenChange(false)
+    } else {
+      const itemValue = getNestedValue(item, valueField)
+      const isSelected = selectedItems.some((selectedItem) => getNestedValue(selectedItem, valueField) === itemValue)
+
+      if (isSelected) {
+        // Remove item
+        const newSelectedItems = selectedItems.filter(
+          (selectedItem) => getNestedValue(selectedItem, valueField) !== itemValue,
+        );
+        (onChange as (value: T[]) => void)(newSelectedItems)
+      } else {
+        // Add item
+        (onChange as (value: T[]) => void)([...selectedItems, item])
+      }
+    }
+  }
+
+  // Handle removing a selected item in multiple mode
+  const handleRemoveItem = (e: React.MouseEvent, item: T) => {
+    e.stopPropagation() // Prevent dropdown from opening
+    if (mode === "multiple") {
+      const newSelectedItems = selectedItems.filter(
+        (selectedItem) => getNestedValue(selectedItem, valueField) !== getNestedValue(item, valueField),
+      )
+        ; (onChange as (value: T[]) => void)(newSelectedItems)
+    }
+  }
+
+  // Get initials for avatar
+  const getInitials = (item: T) => {
+    const label = String(getNestedValue(item, labelField))
+    return label
+      .split(" ")
+      .map((part) => part[0])
+      .join("")
+      .toUpperCase()
+  }
+
+  // Get random color for avatar
+  const getRandomColor = (item: T) => {
+    const colors = ["bg-blue-500", "bg-purple-500", "bg-green-500", "bg-orange-500", "bg-red-500", "bg-teal-500"]
+    const label = String(getNestedValue(item, labelField))
+    const index = label.charCodeAt(0) % colors.length
+    return colors[index]
+  }
+
+  // Ref for dropdown positioning
   const dropdownRef = useRef<HTMLDivElement>(null)
-  const searchInputRef = useRef<HTMLInputElement>(null)
-  
-  // State
-  const [isOpen, setIsOpen] = useState(false)
-  const [searchTerm, setSearchTerm] = useState("")
-  const [filteredOptions, setFilteredOptions] = useState<Option[]>([])
-  const [controllerOptions, setControllerOptions] = useState<Option[]>([])
-  const [loading, setLoading] = useState(false)
-  const [hasMore, setHasMore] = useState(false)
-  const [totalCount, setTotalCount] = useState(0)
-  const [page, setPage] = useState(1)
-  const [cursors, setCursors] = useState<(string | null)[]>([null]) // Track cursors for pagination
-  
-  // Determine if we're using controller mode
-  const isControllerMode = !!controllerRef.current
 
   // Close dropdown when clicking outside
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
+    if (!open) return
+    function handleClick(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false)
+        setOpen(false)
+        if (onOpenChange) onOpenChange(false)
       }
     }
+    document.addEventListener("mousedown", handleClick)
+    return () => document.removeEventListener("mousedown", handleClick)
+  }, [open, onOpenChange])
 
-    document.addEventListener("mousedown", handleClickOutside)
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside)
-    }
-  }, [])
+  const renderResults = useCallback(() => {
+    console.log(`[LOG] RESULTS ${JSON.stringify(results)}`)
 
-  // Focus search input when dropdown opens
-  useEffect(() => {
-    if (isOpen && searchInputRef.current) {
-      searchInputRef.current.focus()
-    }
-    
-    // Load controller options on first open
-    if (isOpen && isControllerMode && initialRenderRef.current) {
-      initialRenderRef.current = false
-      loadControllerOptions(1, "")
-    }
-  }, [isOpen])
-
-  // Handle search term changes
-  useEffect(() => {
-    if (!isControllerMode) {
-      // Client-side filtering for static options
-      setFilteredOptions(optionsRef.current.filter((option) => 
-        option.label.toLowerCase().includes(searchTerm.toLowerCase())
-      ))
-    } else {
-      // Server-side filtering with controller
-      if (searchTimeoutRef.current) {
-        clearTimeout(searchTimeoutRef.current)
-      }
-      
-      searchTimeoutRef.current = setTimeout(() => {
-        loadControllerOptions(1, searchTerm)
-      }, 300) // Debounce search
-    }
-    
-    return () => {
-      if (searchTimeoutRef.current) {
-        clearTimeout(searchTimeoutRef.current)
-      }
-    }
-  }, [searchTerm, isControllerMode])
-
-  // Load options from controller
-  const loadControllerOptions = async (pageNumber: number, search: string) => {
-    if (!controllerRef.current) return
-    
-    try {
-      setLoading(true)
-      const { controller, valueField, labelField, pageSize = 10, customFilters = [] } = controllerRef.current
-      
-      // Create filters for search
-      const filters = [...customFilters]
-      if (search) {
-        filters.push({
-          column: labelField as string,
-          operator: "ilike" as const,
-          value: `%${search}%`,
-        })
-      }
-      
-      // Get data from controller with pagination
-      const result = await controller.getPaginatedData({
-        pageSize,
-        cursor: pageNumber > 1 ? (cursors[pageNumber - 1] || undefined) : undefined,
-        filters,
-      })
-      
-      // Map controller data to options format
-      const mappedOptions = result.data.map(item => ({
-        value: String(item[valueField]),
-        label: String(item[labelField]),
-      }))
-      
-      // Update state based on results
-      if (pageNumber === 1) {
-        setControllerOptions(mappedOptions)
-        // Reset cursors when starting a new search
-        setCursors([null, result.nextCursor])
-      } else {
-        setControllerOptions(prev => [...prev, ...mappedOptions])
-        // Add the next cursor to the array
-        setCursors(prev => [...prev, result.nextCursor])
-      }
-      
-      setHasMore(!!result.nextCursor)
-      setTotalCount(result.count || 0)
-      setPage(pageNumber)
-      setLoading(false)
-    } catch (error) {
-      console.error("Error loading options:", error)
-      setLoading(false)
-    }
-  }
-
-  // Handle scroll to load more options
-  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    if (!isControllerMode) return
-    
-    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget
-    if (scrollHeight - scrollTop <= clientHeight * 1.5 && hasMore && !loading) {
-      loadControllerOptions(page + 1, searchTerm)
-    }
-  }
-
-  const selectedOption = isControllerMode 
-    ? controllerOptions.find((option) => option.value === value) || 
-      optionsRef.current.find((option) => option.value === value)
-    : optionsRef.current.find((option) => option.value === value)
-
-  const toggleDropdown = () => {
-    setIsOpen(!isOpen)
-    setSearchTerm("")
-  }
-
-  const handleSelect = (optionValue: string) => {
-    onChange(optionValue)
-    setIsOpen(false)
-  }
-
-  // Determine which options to display
-  const displayOptions = isControllerMode ? controllerOptions : filteredOptions
+    return results.map((item, index) => {
+      const isSelected = isItemSelected(item)
+      return (
+        <div
+          key={index}
+          className={cn(
+            "flex cursor-pointer select-none items-center px-3 py-2 text-sm hover:bg-gray-100",
+            isSelected && "bg-gray-100 font-semibold",
+          )}
+          onClick={() => handleItemSelect(item)}
+        >
+          {renderItem ? (
+            renderItem(item, isSelected, onChange as (value: T | null) => void)
+          ) : (
+            <>
+              {mode === "single" ? (
+                <Check className={cn("mr-2 h-4 w-4", isSelected ? "opacity-100" : "opacity-0")} />
+              ) : (
+                <div className="flex items-center justify-center w-5 mr-2">
+                  {isSelected ? (
+                    <div className="w-4 h-4 bg-blue-500 rounded flex items-center justify-center">
+                      <Check size={12} className="text-white" />
+                    </div>
+                  ) : (
+                    <div className="w-4 h-4 border border-gray-300 rounded"></div>
+                  )}
+                </div>
+              )}
+              {String(getNestedValue(item, labelField))}
+            </>
+          )}
+        </div>
+      )
+    })
+  }, [results])
 
   return (
-    <div className={cn("relative", className)} ref={dropdownRef}>
-      <div
-        className={cn(
-          "flex items-center justify-between w-full px-3 py-2 border rounded-md cursor-pointer",
-          error ? "border-red-500" : "border-gray-300",
-          "hover:border-gray-400",
-          disabled ? "opacity-50 pointer-events-none" : "",
-        )}
-        onClick={disabled ? undefined : toggleDropdown}
-      >
-        {selectedOption ? (
-          <div className="flex items-center">
-            {showAvatar && (
-              <Avatar className="h-6 w-6 mr-2 bg-purple-600 text-white">
-                <span className="text-xs">EM</span>
-              </Avatar>
-            )}
-            <span>{selectedOption.label}</span>
-          </div>
-        ) : (
-          <span className="text-gray-500">{placeholder}</span>
-        )}
-        <ChevronDown className="h-4 w-4 text-gray-400" />
-      </div>
+    <div className="relative w-full">
+      <div className="relative">
+        {/* Trigger button */}
+        <button
+          type="button"
+          role="combobox"
+          aria-expanded={open}
+          disabled={disabled}
+          className={cn(
+            "w-full flex justify-between items-center border rounded px-3 py-2 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-border-focus",
+            disabled && "opacity-50 cursor-not-allowed",
+            triggerClassName,
+          )}
+          onClick={() => {
+            setOpen((prev) => !prev)
+            if (onOpenChange) onOpenChange(!open)
+          }}
+        >
+          {mode === "single" ? displayValue || placeholder : placeholder}
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </button>
 
-      {error && <p className="mt-1 text-sm text-red-500">{error}</p>}
+        {/* Dropdown */}
+        {open && (
+          <div
+            ref={dropdownRef}
+            className={cn("absolute z-50 w-full rounded-md border bg-white shadow-lg p-0", contentClassName)}
+            style={{
+              top: "calc(100% + 4px)", // Position right below the button with a small gap
+            }}
+          >
+            <div className={cn("", className)}>
+              <div className="flex items-center border-b px-3">
+                <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+                <input
+                  type="text"
+                  placeholder="Search..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="flex-1 h-9 border-0 outline-none focus:ring-0 bg-transparent"
+                />
+              </div>
+              <div className="max-h-[300px] overflow-auto">
+                <div>
+                  {renderResults()}
+                  {/* InView sentinel for infinite scroll */}
+                  <InView as="div" onChange={setIsEndOfListInView}>
+                    <div style={{ height: 1 }} />
+                  </InView>
+                </div>
 
-      {isOpen && (
-        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg">
-          <div className="p-2 border-b border-gray-200">
-            <div className="relative">
-              <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
-              <input
-                ref={searchInputRef}
-                type="text"
-                placeholder={searchPlaceholder}
-                className="w-full pl-8 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
+                {query.isFetching || query.isLoading ? (
+                  <div className="py-2 text-center">
+                    <Loader2 className="h-4 w-4 animate-spin mx-auto" />
+                    <span className="text-xs text-muted-foreground">Scroll for more</span>
+                  </div>
+                ) : (
+                  results.length === 0 && <div className="py-6 text-center text-muted-foreground">{emptyMessage}</div>
+                )}
+              </div>
             </div>
           </div>
-          
-          <div className="max-h-60 overflow-y-auto" onScroll={handleScroll}>
-            {loading && displayOptions.length === 0 ? (
-              <div className="flex items-center justify-center py-4">
-                <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
-                <span className="ml-2 text-gray-500">Loading...</span>
-              </div>
-            ) : displayOptions.length === 0 ? (
-              <div className="p-2 text-center text-gray-500">No options found</div>
-            ) : (
-              displayOptions.map((option) => (
-                <div
-                  key={option.value}
-                  className={cn(
-                    "flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-gray-100",
-                    option.value === value && "bg-gray-100"
-                  )}
-                  onClick={() => handleSelect(option.value)}
-                >
-                  <div className="flex items-center">
-                    {showAvatar && (
-                      <Avatar className="h-6 w-6 mr-2 bg-purple-600 text-white">
-                        <span className="text-xs">{option.label.substring(0, 2).toUpperCase()}</span>
-                      </Avatar>
-                    )}
-                    <span>{option.label}</span>
-                  </div>
-                  {option.value === value && <Check className="h-4 w-4 text-blue-500" />}
+        )}
+      </div>
+
+      {/* Selected items for multiple mode */}
+      {mode === "multiple" && selectedItems.length > 0 && (
+        <div className="mt-2 max-h-[150px] overflow-y-auto border rounded-md p-1">
+          <div className="flex flex-wrap gap-1">
+            {selectedItems.map((item, index) => {
+              const label = String(getNestedValue(item, labelField))
+              const avatarSrc = avatarField ? String(getNestedValue(item, avatarField) || "") : ""
+              const initials = getInitials(item)
+
+              return (
+                <div key={index} className="flex items-center gap-2 bg-gray-100 rounded-md pl-2 pr-1 py-1 mb-1">
+                  <Avatar
+                    size="32"
+                    src={avatarSrc}
+                    alt={label}
+                    initials={initials}
+                    variant={avatarSrc ? "populated" : "empty"}
+                  />
+                  <span className="text-sm">{label}</span>
+                  <button
+                    type="button"
+                    onClick={(e) => handleRemoveItem(e, item)}
+                    className="text-gray-400 hover:text-gray-600"
+                    disabled={disabled}
+                  >
+                    <X size={16} />
+                  </button>
                 </div>
-              ))
-            )}
-            
-            {loading && displayOptions.length > 0 && (
-              <div className="flex items-center justify-center py-2">
-                <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
-              </div>
-            )}
+              )
+            })}
           </div>
         </div>
       )}
+
+      {/* Error message */}
+      {/* {error && (
+        <div className="text-red-500 text-sm mt-1">
+          {JSON.stringify(error)}
+        </div>
+      )} */}
     </div>
   )
 }

@@ -408,6 +408,44 @@ export type Database = {
           },
         ]
       }
+      notifications: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          status: Database["public"]["Enums"]["notification_status"]
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          status?: Database["public"]["Enums"]["notification_status"]
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          status?: Database["public"]["Enums"]["notification_status"]
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       resource_competencies: {
         Row: {
           created_at: string
@@ -450,66 +488,84 @@ export type Database = {
       resource_evaluations: {
         Row: {
           accessibility_comment: string | null
+          accessibility_ok: boolean | null
           comment_comment: string | null
           concordance_comment: string | null
+          concordance_ok: boolean | null
           correctness_comment: string | null
+          correctness_ok: boolean | null
           created_at: string
           description_comment: string | null
           duration_comment: string | null
-          evaluator_id: string | null
+          evaluator_id: string
           feedback: string | null
           id: string
           link_comment: string | null
           quality_comment: string | null
+          quality_ok: boolean | null
           relevance_comment: string | null
+          relevance_ok: boolean | null
           resource_id: string
           specific_competence_comment: string | null
           status: Database["public"]["Enums"]["evaluation_status"] | null
           updated_at: string
           user_id: string
           value_comment: string | null
+          value_ok: boolean | null
         }
         Insert: {
           accessibility_comment?: string | null
+          accessibility_ok?: boolean | null
           comment_comment?: string | null
           concordance_comment?: string | null
+          concordance_ok?: boolean | null
           correctness_comment?: string | null
+          correctness_ok?: boolean | null
           created_at?: string
           description_comment?: string | null
           duration_comment?: string | null
-          evaluator_id?: string | null
+          evaluator_id: string
           feedback?: string | null
           id?: string
           link_comment?: string | null
           quality_comment?: string | null
+          quality_ok?: boolean | null
           relevance_comment?: string | null
+          relevance_ok?: boolean | null
           resource_id: string
           specific_competence_comment?: string | null
           status?: Database["public"]["Enums"]["evaluation_status"] | null
           updated_at?: string
           user_id: string
           value_comment?: string | null
+          value_ok?: boolean | null
         }
         Update: {
           accessibility_comment?: string | null
+          accessibility_ok?: boolean | null
           comment_comment?: string | null
           concordance_comment?: string | null
+          concordance_ok?: boolean | null
           correctness_comment?: string | null
+          correctness_ok?: boolean | null
           created_at?: string
           description_comment?: string | null
           duration_comment?: string | null
-          evaluator_id?: string | null
+          evaluator_id?: string
           feedback?: string | null
           id?: string
           link_comment?: string | null
           quality_comment?: string | null
+          quality_ok?: boolean | null
           relevance_comment?: string | null
+          relevance_ok?: boolean | null
           resource_id?: string
           specific_competence_comment?: string | null
           status?: Database["public"]["Enums"]["evaluation_status"] | null
           updated_at?: string
           user_id?: string
           value_comment?: string | null
+          value_ok?: boolean | null
         }
         Relationships: [
           {
@@ -569,6 +625,7 @@ export type Database = {
       }
       resources: {
         Row: {
+          aggregate: string | null
           author_id: string | null
           class_id: number | null
           comentarii: string | null
@@ -576,10 +633,12 @@ export type Database = {
           description: string | null
           discipline_id: number | null
           durata: string | null
+          evaluator_id: string | null
           id: string
           is_public: boolean | null
           link: string | null
           mentor_id: string | null
+          serial_number: number
           specific_competency_id: number | null
           status: Database["public"]["Enums"]["resource_status"] | null
           title: string
@@ -589,6 +648,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          aggregate?: string | null
           author_id?: string | null
           class_id?: number | null
           comentarii?: string | null
@@ -596,10 +656,12 @@ export type Database = {
           description?: string | null
           discipline_id?: number | null
           durata?: string | null
+          evaluator_id?: string | null
           id?: string
           is_public?: boolean | null
           link?: string | null
           mentor_id?: string | null
+          serial_number?: number
           specific_competency_id?: number | null
           status?: Database["public"]["Enums"]["resource_status"] | null
           title: string
@@ -609,6 +671,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          aggregate?: string | null
           author_id?: string | null
           class_id?: number | null
           comentarii?: string | null
@@ -616,10 +679,12 @@ export type Database = {
           description?: string | null
           discipline_id?: number | null
           durata?: string | null
+          evaluator_id?: string | null
           id?: string
           is_public?: boolean | null
           link?: string | null
           mentor_id?: string | null
+          serial_number?: number
           specific_competency_id?: number | null
           status?: Database["public"]["Enums"]["resource_status"] | null
           title?: string
@@ -648,6 +713,13 @@ export type Database = {
             columns: ["discipline_id"]
             isOneToOne: false
             referencedRelation: "disciplines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "resources_evaluator_id_fkey"
+            columns: ["evaluator_id"]
+            isOneToOne: false
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
           {
@@ -769,7 +841,6 @@ export type Database = {
           role: Database["public"]["Enums"]["user_role"] | null
           status: Database["public"]["Enums"]["user_status"] | null
           updated_at: string
-          username: string
         }
         Insert: {
           avatar_url?: string | null
@@ -782,7 +853,6 @@ export type Database = {
           role?: Database["public"]["Enums"]["user_role"] | null
           status?: Database["public"]["Enums"]["user_status"] | null
           updated_at?: string
-          username: string
         }
         Update: {
           avatar_url?: string | null
@@ -795,7 +865,6 @@ export type Database = {
           role?: Database["public"]["Enums"]["user_role"] | null
           status?: Database["public"]["Enums"]["user_status"] | null
           updated_at?: string
-          username?: string
         }
         Relationships: [
           {
@@ -840,6 +909,7 @@ export type Database = {
     Enums: {
       evaluation_status: "CONFORMABLE" | "UNCONFORMABLE" | "IN_PROGRESS"
       group_member_role: "OWNER" | "ADMIN" | "MEMBER"
+      notification_status: "READ" | "UNREAD"
       resource_status:
         | "DRAFT"
         | "SUBMITTED"
@@ -852,7 +922,7 @@ export type Database = {
         | "FORMATOR"
         | "EVALUATOR"
         | "STUDENT"
-      user_status: "ACTIVE" | "INACTIVE" | "SUSPENDED"
+      user_status: "ACTIVE" | "INACTIVE" | "SUSPENDED" | "INVITED"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -970,6 +1040,7 @@ export const Constants = {
     Enums: {
       evaluation_status: ["CONFORMABLE", "UNCONFORMABLE", "IN_PROGRESS"],
       group_member_role: ["OWNER", "ADMIN", "MEMBER"],
+      notification_status: ["READ", "UNREAD"],
       resource_status: [
         "DRAFT",
         "SUBMITTED",
@@ -984,7 +1055,7 @@ export const Constants = {
         "EVALUATOR",
         "STUDENT",
       ],
-      user_status: ["ACTIVE", "INACTIVE", "SUSPENDED"],
+      user_status: ["ACTIVE", "INACTIVE", "SUSPENDED", "INVITED"],
     },
   },
 } as const

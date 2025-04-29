@@ -12,7 +12,7 @@ export const educationLevels = [
 // Role options
 export const roles = [
   { id: "cursant", label: "Cursant", color: "bg-[#EFF6FF]" },
-  { id: "mentor", label: "Mentor", color: "bg-[#ECFDF5]" },
+  { id: "formator", label: "Formator", color: "bg-[#ECFDF5]" },
   { id: "evaluator", label: "Evaluator", color: "bg-[#EFF6FF]" },
   { id: "moderator", label: "Moderator", color: "bg-[#EFF6FF]" },
   { id: "admin", label: "Admin", color: "bg-[#FFFBEB]" },

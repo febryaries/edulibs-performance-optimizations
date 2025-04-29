@@ -1,0 +1,25 @@
+import { z } from "zod";
+
+export const gen6Schema = z.object({
+    serial_number: z.number().optional(),
+    title: z.string(),
+    author: z.string(),
+    class: z.string(),
+    discipline: z.string(),
+    curricular_area: z.string(),
+    domain: z.string(),
+    specific_competency: z.string(),
+    concordance_comment_yes: z.string(),
+    concordance_comment_no: z.string(),
+    relevance_comment_yes: z.string(),
+    relevance_comment_no: z.string(),
+    accessibility_comment_yes: z.string(),
+    accessibility_comment_no: z.string(),
+    correctness_comment_yes: z.string(),
+    correctness_comment_no: z.string(),
+    value_comment_yes: z.string(),
+    value_comment_no: z.string(),
+    quality_comment_yes: z.string(),
+    quality_comment_no: z.string(),
+    evaluation_date: z.date().optional(),
+  });

@@ -12,9 +12,7 @@ export default function AuthLayout({
         <Image src="/logo.svg" alt="EduApps Logo" width={120} height={40} />
       </div>
       <div className="flex-1 flex items-center justify-center px-4">
-        <div className="w-full max-w-md">
           {children}
-        </div>
       </div>
       <Footer navItems={[
         {

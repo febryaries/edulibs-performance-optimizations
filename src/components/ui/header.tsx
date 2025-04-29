@@ -10,7 +10,7 @@ import { Notification } from "@/components/ui/notification"
 import { Separator } from "@/components/ui/separator"
 import { UserPopover } from "@/components/ui/user-popover"
 
-const headerVariants = cva("w-full shadow-xs bg-white", {
+const headerVariants = cva("w-full shadow-xs bg-white relative z-30", {
   variants: {
     variant: {
       default: "",
@@ -71,7 +71,7 @@ export function Header({
     <header className={cn(headerVariants({ variant, size }), className)} {...props}>
       <div className="h-full flex items-center justify-between px-4 md:px-6 lg:px-8">
         {/* Left side - Logo and hamburger menu */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 md:gap-4">
           {/* Mobile menu toggle - only visible on smaller screens */}
           {showMobileMenu && (
             <Button
@@ -88,36 +88,33 @@ export function Header({
           {/* Logo */}
           {logo && <div className="flex-shrink-0 text-[#4F7FFF] font-bold text-xl">{logo}</div>}
 
-          <Separator orientation="vertical" className="mx-4 h-8" />
+          <Separator orientation="vertical" className="hidden md:block mx-4 h-8" />
 
           {/* Children - for custom content like navigation */}
           {children}
         </div>
 
-        <Separator orientation="vertical" className="mx-4 h-8" />
-
         {/* Right side - Notifications and Avatar */}
         <div className="flex items-center gap-3">
           {/* Notification component */}
-          {notificationCount !== undefined && (
+          {/* {notificationCount !== undefined && (
             <button
-              className="relative flex items-center justify-center focus:outline-none"
+              className="relative hidden md:flex items-center justify-center focus:outline-none"
               onClick={onNotificationClick}
               aria-label={`${notificationCount} notifications`}
             >
               <Notification count={notificationCount} size={notificationSize} countBgColor="#4F7FFF" />
             </button>
-          )}
+          )} */}
 
           {/* User Avatar */}
-          {/* Replaced Avatar with UserPopover for popover functionality */}
           <UserPopover />
         </div>
       </div>
 
       {/* Mobile Menu */}
       {mobileMenuOpen && showMobileMenu && (
-        <div className="md:hidden bg-white border-t border-border-default">
+        <div className="absolute top-full left-0 right-0 z-40 md:hidden bg-white border-t border-border-default shadow-md">
           <div className="px-4 py-4">{mobileMenuContent}</div>
         </div>
       )}

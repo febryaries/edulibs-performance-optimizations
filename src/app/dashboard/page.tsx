@@ -1,41 +1,40 @@
 "use client"
 
-import { useEffect, useState, useMemo, type ReactNode } from "react"
+import { useEffect, useState, useMemo } from "react"
+// @ts-ignore
 import { useRouter } from "next/navigation"
-import { useAuth } from "@/lib/auth-context"
+import { useAuth, isAdmin, isModerator, isEvaluator, isStudent } from "@/lib/auth-context"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { ResourceForm } from "@/components/resource-form"
-import { ResourceViewer } from "@/components/resource-viewer"
+import { ResourceForm } from "@/components/resources/resource-form"
+import { ResourceViewer } from "@/components/resources/resource-viewer"
+import { ResourceReview } from "@/components/resources/resource-review"
 import { Sheet, SheetContent } from "@/components/ui/sheet-fullscreen"
+import { Avatar } from "@/components/ui/avatar"
 import {
   Plus,
-  Circle,
   BookOpen,
   School,
-  BookText
+  BookText,
+  Calendar,
+  Tag
 } from "lucide-react"
 import { DataTable, type Filter } from "@/components/ui/data-table/data-table"
 import { type ColumnDef } from "@tanstack/react-table"
 import { useSupabaseBrowser } from "@/utils/supabase/client"
-import { ResourcesController } from "@/queries"
 import { useToast } from "@/components/ui/use-toast"
 import { ResourceFormValues } from "@/schemas/resource-schema"
 import { Database } from "@/utils/database.types"
-import { useResources } from "@/hooks/resources/use-resources"
-import { useCreateResource, useUpdateResource, useDeleteResource } from "@/hooks/resources/use-resources"
-import { useDisciplines } from "@/hooks/disciplines/use-disciplines"
-import { useClasses } from "@/hooks/classes/use-classes"
-import { useSpecificCompetencies } from "@/hooks/specific-competencies/use-specific-competencies"
 import { useRefetchContext } from "@/lib/refetch-context"
-import { ResourceReview } from "@/components/resource-review"
+import { Resource, ResourceEvaluation, resourceRelationMap, useClassesCrud, useDisciplinesCrud, useResourcesController, useResourcesCrud, useSpecificCompetenciesCrud } from "@/hooks/use-controllers"
 
 // Status options for dropdown
 const statusOptions = [
-  { value: "ciorna", label: "Ciornă" },
-  { value: "conform", label: "Conform" },
-  { value: "neconform", label: "Neconform" },
-  { value: "evaluare", label: "În evaluare" },
+  { value: "DRAFT", label: "Ciornă" },
+  { value: "CONFORMABLE", label: "Conform" },
+  { value: "UNCONFORMABLE", label: "Neconform" },
+  { value: "IN_REVIEW", label: "În evaluare" },
+  { value: "SUBMITTED", label: "Spre evaluare" },
 ]
 
 // Column definitions for visibility toggle
@@ -45,23 +44,24 @@ const columnDefinitions = [
   { id: "clasa", label: "Clasă" },
   { id: "status", label: "Status" },
   { id: "competenta", label: "Competența specifică" },
+  { id: "author", label: "Autor" },
+  { id: "evaluator", label: "Evaluator" },
   { id: "data", label: "Data" },
 ]
 
 export default function DashboardPage() {
   const router = useRouter()
   const { user, isLoading: authLoading, isInitialized } = useAuth()
-  const [selectedItems, setSelectedItems] = useState<number[]>([])
   const [mounted, setMounted] = useState(false)
   const [currentView, setCurrentView] = useState<'viewer' | 'form' | 'review' | null>(null)
-  const [selectedResource, setSelectedResource] = useState<any>(null)
+  const [selectedResource, setSelectedResource] = useState<Resource | null>(null)
+  const [selectedEvaluationId, setSelectedEvaluationId] = useState<string | null>(null)
   const [isFullScreen, setIsFullScreen] = useState(false)
   const [isViewerFullScreen, setIsViewerFullScreen] = useState(false)
   const [isEditMode, setIsEditMode] = useState(false)
 
-  // Supabase client and controllers setup for resource operations
+  // Supabase client setup for resource operations
   const supabase = useSupabaseBrowser()
-  const resourcesController = useMemo(() => new ResourcesController(supabase), [supabase])
 
   // Create stable references for controller configs
   const disciplineControllerConfig = useMemo(() => ({
@@ -99,9 +99,16 @@ export default function DashboardPage() {
   const { toast } = useToast()
 
   // Mutations for resource operations
-  const createResourceMutation = useCreateResource()
-  const updateResourceMutation = useUpdateResource()
-  const deleteResourceMutation = useDeleteResource()
+  const { 
+    useList: useResources, 
+    useCreate: createResourceMutation, 
+    useUpdate: updateResourceMutation, 
+    useDelete: deleteResourceMutation 
+  } = useResourcesCrud()
+
+  const {useList: useDisciplines} = useDisciplinesCrud()
+  const {useList: useClasses} = useClassesCrud()
+  const {useList: useSpecificCompetencies} = useSpecificCompetenciesCrud()
 
   const handleCreateResource = async () => {
     setSelectedResource(null)
@@ -126,17 +133,19 @@ export default function DashboardPage() {
         specific_competency_id: formData.specific_competency_id ? Number(formData.specific_competency_id) : null,
         status: formData.status as Database["public"]["Enums"]["resource_status"],
         mentor_id: formData.mentor_id || null,
+        evaluator_id: formData.evaluator_id || null,
         description: formData.description || null,
         link: formData.link || null,
         durata: formData.durata || null,
         comentarii: formData.comentarii || null,
+        aggregate: formData.aggregate || null,
       }
 
       // If we're editing an existing resource, update it
       if (selectedResource && isEditMode) {
         await updateResourceMutation.mutateAsync({
           id: selectedResource.id,
-          resource: resourceData
+          record: resourceData,
         })
       } else {
         // Otherwise create a new resource
@@ -176,7 +185,7 @@ export default function DashboardPage() {
     }
   }
 
-  const handleDeleteResource = async (id: number) => {
+  const handleDeleteResource = async (id: number | string) => {
     try {
       // Show loading toast
       toast({
@@ -220,15 +229,9 @@ export default function DashboardPage() {
     setIsViewerFullScreen(!isViewerFullScreen)
   }
 
-  const handleViewResource = (resource: any) => {
+  const handleViewResource = (resource: Resource | null) => {
     setSelectedResource(resource)
     setCurrentView('viewer')
-  }
-
-  const handleEditResource = (resource: any) => {
-    setSelectedResource(resource)
-    setIsEditMode(true)
-    setCurrentView('form')
   }
 
   // Define filters for the data table
@@ -264,7 +267,7 @@ export default function DashboardPage() {
       id: "created_at", // Use the actual database column name as the filter ID
       label: "Data",
       type: "date",
-      icon: <Circle className="h-4 w-4 text-gray-400" />,
+      icon: <Calendar className="h-4 w-4 text-gray-400" />,
       queryColumn: "created_at"
     },
     {
@@ -272,7 +275,7 @@ export default function DashboardPage() {
       label: "Status",
       type: "select",
       options: statusOptions,
-      icon: <Circle className="h-4 w-4 text-gray-400" />,
+      icon: <Tag className="h-4 w-4 text-gray-400" />,
       queryColumn: "status"
     }
   ]
@@ -294,7 +297,7 @@ export default function DashboardPage() {
   }
 
   // Define columns for the data table
-  const columns: ColumnDef<any>[] = [
+  const columns: ColumnDef<Resource>[] = [
     {
       id: "select",
       header: ({ table }) => (
@@ -333,16 +336,76 @@ export default function DashboardPage() {
       accessorKey: "specific_competency.name",
       header: "Competența specifică",
       cell: ({ row }) => {
-        const competency = row.original.specific_competency;
-        return competency ? competency.name : "";
+        const competency = row.original?.specific_competency;
+        return competency ? competency?.name : "";
       },
     },
     {
       accessorKey: "author.first_name",
       header: "Autor",
       cell: ({ row }) => {
-        const user = row.original.author
-        return user ? `${user.first_name} ${user.last_name}` : ""
+        const user = row.original?.author;
+        
+        if (!user) {
+          return (
+            <div className="flex items-center gap-2">
+              <Avatar 
+                size="32" 
+                variant="empty"
+                alt="Ne asignat"
+              />
+              <span className="text-gray-500">Ne asignat</span>
+            </div>
+          );
+        }
+        
+        const initials = `${user.first_name?.[0] || ''}${user.last_name?.[0] || ''}`;
+        return (
+          <div className="flex items-center gap-2">
+            <Avatar 
+              size="32" 
+              variant={user.avatar_url ? "populated" : "01"}
+              initials={initials}
+              src={user.avatar_url || undefined}
+              alt={`${user.first_name} ${user.last_name}`}
+            />
+            <span>{`${user.first_name || ''} ${user.last_name || ''}`}</span>
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: "evaluator.first_name",
+      header: "Evaluator",
+      cell: ({ row }) => {
+        const evaluator = row.original?.evaluator;
+        
+        if (!evaluator) {
+          return (
+            <div className="flex items-center gap-2">
+              <Avatar 
+                size="32" 
+                variant="empty"
+                alt="Ne asignat"
+              />
+              <span className="text-gray-500">Ne asignat</span>
+            </div>
+          );
+        }
+        
+        const initials = `${evaluator.first_name?.[0] || ''}${evaluator.last_name?.[0] || ''}`;
+        return (
+          <div className="flex items-center gap-2">
+            <Avatar 
+              size="32" 
+              variant={evaluator.avatar_url ? "populated" : "01"}
+              initials={initials}
+              src={evaluator.avatar_url || undefined}
+              alt={`${evaluator.first_name} ${evaluator.last_name}`}
+            />
+            <span>{`${evaluator.first_name || ''} ${evaluator.last_name || ''}`}</span>
+          </div>
+        );
       },
     },
     {
@@ -379,32 +442,21 @@ export default function DashboardPage() {
     }
   ]
 
-  // Add new state for review modal
-  const [reviewSheetOpen, setReviewSheetOpen] = useState(false);
-  const [reviewResourceId, setReviewResourceId] = useState<string | null>(null);
-  const [reviewEvaluationId, setReviewEvaluationId] = useState<string | null>(null);
-
-  // Helper to open review sheet
-  const openReviewSheet = (resourceId: string, evaluationId?: string | null) => {
-    console.log("Aici...")
-    setReviewResourceId(resourceId);
-    setReviewEvaluationId(evaluationId || null);
-    setReviewSheetOpen(true);
-  };
-
-  // Helper to close review sheet
-  const closeReviewSheet = () => {
-    setReviewSheetOpen(false);
-    setReviewResourceId(null);
-    setReviewEvaluationId(null);
-  };
+  // Filter columns based on user role
+  const filteredColumns = useMemo(() => {
+    // If user is not a student, show all columns
+    if (user && (isAdmin(user) || isModerator(user) || isEvaluator(user))) {
+      return columns;
+    }
+    // Otherwise, hide the evaluator column
+    return columns.filter(col => (col as any).accessorKey !== "evaluator.first_name");
+  }, [user, columns]);
 
   // Handles opening the review sheet and sets the correct evaluation id
-  const handleOpenReview = (resource: any, evaluationId?: string | null) => {
+  const handleOpenReview = (resource: Resource, evaluationId?: string | null) => {
     setSelectedResource(resource);
-    setReviewEvaluationId(evaluationId || null);
+    setSelectedEvaluationId(evaluationId || null);
     setCurrentView('review');
-    setReviewSheetOpen(true);
   };
 
   // Show loading state while checking authentication or loading resources
@@ -427,16 +479,19 @@ export default function DashboardPage() {
     <div className="container mx-auto px-6 py-6">
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">Resurse educaționale</h1>
-        <Button className="bg-blue-600 hover:bg-blue-700 text-white" onClick={handleCreateResource}>
-          <Plus className="mr-1.5 h-4 w-4" />
-          Adaugă resursă
-        </Button>
+        {user && (isStudent(user) || isAdmin(user)) && (
+          <Button className="bg-blue-600 hover:bg-blue-700 text-white" onClick={handleCreateResource}>
+            <Plus className="mr-1.5 h-4 w-4" />
+            Adaugă resursă
+          </Button>
+        )}
       </div>
 
       {/* Use the DataTable component with useResources hook */}
-      <DataTable
-        columns={columns}
+      <DataTable<Resource, any, 'resources', typeof resourceRelationMap>
+        columns={filteredColumns}
         useQueryHook={useResources}
+        useController={useResourcesController}
         filters={tableFilters}
         searchColumns={["title", "description"]}
         enableRowSelection={true}
@@ -453,10 +508,11 @@ export default function DashboardPage() {
 
       {/* Resource Sheet - shows either Form or Viewer based on currentView */}
       <Sheet open={currentView !== null} onOpenChange={() => setCurrentView(null)}>
-        <SheetContent className="p-0 overflow-hidden" fullScreen={currentView === 'form' ? isFullScreen : isViewerFullScreen}>
+        <SheetContent mobileFullScreen={true} className="p-0 overflow-hidden" fullScreen={currentView === 'form' ? isFullScreen : isViewerFullScreen}>
           {currentView === 'form' && (
             <ResourceForm
               onClose={() => setCurrentView(null)}
+              onBack={() => setCurrentView('viewer')}
               onSave={handleSaveResource}
               onDelete={handleDeleteResource}
               onToggleFullScreen={toggleFullScreen}
@@ -473,25 +529,24 @@ export default function DashboardPage() {
               isFullScreen={isViewerFullScreen}
               onEdit={() => {
                 setIsEditMode(true)
+                setIsFullScreen(isViewerFullScreen)
                 setCurrentView('form')
               }}
-              // Pass both handlers to ResourceViewer
               openReviewSheet={handleOpenReview}
             />
           )}
           {currentView === 'review' && selectedResource && (
             <ResourceReview
               onClose={() => setCurrentView(null)}
+              onBack={() => setCurrentView('viewer')}
               onToggleFullScreen={toggleViewerFullScreen}
               resource={selectedResource}
-              evaluationId={reviewEvaluationId || ''}
+              evaluationId={selectedEvaluationId || ""}
               isFullScreen={isViewerFullScreen}
             />
           )}
         </SheetContent>
       </Sheet>
-      {/* ResourceReviewSheet is now global, not inside ResourceViewer */}
-
     </div>
   )
 }

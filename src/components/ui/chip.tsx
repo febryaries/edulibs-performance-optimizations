@@ -18,7 +18,7 @@ const chipVariants = cva(
         tag: "bg-bg-light text-text-default hover:bg-bg-focus-lightest",
         filter: "bg-bg-light text-text-default hover:bg-bg-focus-lightest",
         cursant: "bg-[#F5F8FF] text-text-default hover:bg-[#EFF6FF]",
-        mentor: "bg-[#F0FDF4] text-text-default hover:bg-[#DCFCE7]",
+        formator: "bg-[#F0FDF4] text-text-default hover:bg-[#DCFCE7]",
         evaluator: "bg-[#EFF6FF] text-text-default hover:bg-[#DBEAFE]",
         moderator: "bg-[#F5F3FF] text-text-default hover:bg-[#EDE9FE]",
         admin: "bg-[#FFFBEB] text-text-default hover:bg-[#FEF3C7]",
@@ -53,7 +53,7 @@ const chipVariants = cva(
       },
       {
         selected: true,
-        variant: "mentor",
+        variant: "formator",
         className: "bg-[#DCFCE7] text-text-accent",
       },
       {

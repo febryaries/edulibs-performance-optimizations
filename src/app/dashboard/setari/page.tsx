@@ -2,62 +2,174 @@
 
 import type React from "react"
 
-import { useState } from "react"
-import { UserCircle, Lock, Bell, Settings } from "lucide-react"
+import { useState, useEffect } from "react"
+import { UserCircle, Lock } from "lucide-react"
 import { Avatar } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Switch } from "@/components/ui/switch"
-import { Checkbox } from "@/components/ui/checkbox"
 import { useAuth } from "@/lib/auth-context"
+import { useUsersCrud, useEducationLevelsCrud } from "@/hooks/use-controllers"
+import { useToast } from "@/components/ui/use-toast"
+import { createClient } from "@/utils/supabase/client"
+import { SearchableDropdown } from "@/components/ui/searchable-dropdown"
 
 export default function SettingsPage() {
-
+  const { toast } = useToast()
   const { user } = useAuth()
+  const { useById, useUpdate } = useUsersCrud()
+  // Get user data from the database
+  const { data: userData } = useById(user?.id || '')
+  const { useList: useEducationalLevels } = useEducationLevelsCrud()
+  
   const [activeSection, setActiveSection] = useState<string>("date-personale")
-  const [formData, setFormData] = useState({
-    firstName: user?.firstName || "Liliana",
-    lastName: user?.lastName || "Rotaru",
-    email: user?.email || "lilianarotaru@gmail.com",
+  const [formData, setFormData] = useState<{
+    firstName: string;
+    lastName: string;
+    email: string;
+    educationLevelId: number | undefined;
+    currentPassword: string;
+    newPassword: string;
+    confirmPassword: string;
+  }>({
+    firstName: "",
+    lastName: "",
+    email: user?.email || "",
+    educationLevelId: undefined,
     currentPassword: "",
     newPassword: "",
     confirmPassword: "",
   })
 
-  const [notificationSettings, setNotificationSettings] = useState({
-    resourceEvaluated: true,
-    platformNews: true,
-    updates: true,
-    vacationMode: false,
-  })
-
-  const [twoFactorEnabled, setTwoFactorEnabled] = useState(true)
+  // Update form data when userData changes
+  useEffect(() => {
+    if (userData) {
+      setFormData(prev => ({
+        ...prev,
+        firstName: userData.first_name || "",
+        lastName: userData.last_name || "",
+        email: user?.email || "",
+        educationLevelId: userData.education_level_id || -1
+      }))
+    }
+  }, [userData, user])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
     setFormData((prev) => ({ ...prev, [name]: value }))
   }
 
-  const handleSavePersonalData = (e: React.FormEvent) => {
+  const handleSavePersonalData = async (e: React.FormEvent) => {
     e.preventDefault()
-    // Save personal data logic
-    console.log("Saving personal data:", formData)
+    
+    try {
+      // Save personal data to the database
+      if (user?.id) {
+        // 1. Update the Supabase Auth metadata
+        const supabase = createClient()
+        const { error: authError } = await supabase.auth.updateUser({
+          data: {
+            first_name: formData.firstName,
+            last_name: formData.lastName
+          }
+        })
+        
+        if (authError) throw authError
+        
+        // 2. Update the users table in the database
+  
+        await useUpdate.mutateAsync({ 
+          id: user.id, 
+          record: {
+            first_name: formData.firstName,
+            last_name: formData.lastName,
+            education_level_id: formData.educationLevelId
+          }
+        })
+        
+        toast({
+          title: "Succes",
+          description: "Datele personale au fost actualizate cu succes.",
+        })
+      }
+    } catch (error) {
+      console.error("Error saving personal data:", error)
+      toast({
+        title: "Eroare",
+        description: "A apărut o eroare la salvarea datelor personale.",
+        variant: "destructive",
+      })
+    }
   }
 
-  const handleSavePassword = (e: React.FormEvent) => {
+  const handleSavePassword = async (e: React.FormEvent) => {
     e.preventDefault()
-    // Save password logic
-    console.log("Saving password:", {
-      currentPassword: formData.currentPassword,
-      newPassword: formData.newPassword,
-    })
-  }
-
-  const handleSaveNotifications = (e: React.FormEvent) => {
-    e.preventDefault()
-    // Save notification settings
-    console.log("Saving notification settings:", notificationSettings)
+    
+    // Validate password inputs
+    if (formData.newPassword !== formData.confirmPassword) {
+      toast({
+        title: "Eroare",
+        description: "Parolele nu coincid.",
+        variant: "destructive",
+      })
+      return
+    }
+    
+    if (formData.newPassword.length < 8) {
+      toast({
+        title: "Eroare",
+        description: "Parola trebuie să aibă cel puțin 8 caractere.",
+        variant: "destructive",
+      })
+      return
+    }
+    
+    try {
+      // Create Supabase client
+      const supabase = createClient()
+      
+      // First verify the current password
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: user?.email || '',
+        password: formData.currentPassword,
+      })
+      
+      if (signInError) {
+        toast({
+          title: "Eroare",
+          description: "Parola curentă este incorectă.",
+          variant: "destructive",
+        })
+        return
+      }
+      
+      // Update the password
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: formData.newPassword,
+      })
+      
+      if (updateError) throw updateError
+      
+      // Clear password fields
+      setFormData(prev => ({
+        ...prev,
+        currentPassword: "",
+        newPassword: "",
+        confirmPassword: "",
+      }))
+      
+      toast({
+        title: "Succes",
+        description: "Parola a fost schimbată cu succes.",
+      })
+    } catch (error) {
+      console.error("Error changing password:", error)
+      toast({
+        title: "Eroare",
+        description: "A apărut o eroare la schimbarea parolei.",
+        variant: "destructive",
+      })
+    }
   }
 
   return (
@@ -86,24 +198,6 @@ export default function SettingsPage() {
                 <Lock size={18} />
                 <span>Schimbă parola</span>
               </button>
-              <button
-                className={`flex items-center gap-2 p-4 text-left hover:bg-gray-50 ${
-                  activeSection === "notificari" ? "bg-blue-50 border-l-4 border-blue-500" : ""
-                }`}
-                onClick={() => setActiveSection("notificari")}
-              >
-                <Bell size={18} />
-                <span>Notificări</span>
-              </button>
-              <button
-                className={`flex items-center gap-2 p-4 text-left hover:bg-gray-50 ${
-                  activeSection === "alte-optiuni" ? "bg-blue-50 border-l-4 border-blue-500" : ""
-                }`}
-                onClick={() => setActiveSection("alte-optiuni")}
-              >
-                <Settings size={18} />
-                <span>Alte opțiuni</span>
-              </button>
             </div>
           </Card>
         </div>
@@ -115,17 +209,14 @@ export default function SettingsPage() {
             {activeSection === "date-personale" && (
               <div>
                 <h2 className="text-xl font-semibold mb-4">Date personale</h2>
-                <p className="text-gray-600 mb-6">Actualizează-ți numele și fotografia de profil.</p>
+                <p className="text-gray-600 mb-6">Actualizează-ți numele și prenumele.</p>
 
                 <div className="flex flex-col items-center mb-6">
                   <Avatar
                     size="96"
                     className="bg-blue-500 text-white text-2xl mb-4"
-                    initials={`${formData.firstName.charAt(0)}${formData.lastName.charAt(0)}`}
+                    initials={`${formData.firstName.charAt(0) || ''}${formData.lastName.charAt(0) || ''}`.toUpperCase()}
                   />
-                  <Button variant="outline" className="bg-blue-500 text-white hover:bg-blue-600">
-                    Alege o fotografie
-                  </Button>
                 </div>
 
                 <form onSubmit={handleSavePersonalData}>
@@ -138,8 +229,8 @@ export default function SettingsPage() {
                         id="email"
                         name="email"
                         value={formData.email}
-                        onChange={handleInputChange}
-                        className="w-full"
+                        disabled={true}
+                        className="w-full bg-gray-100"
                       />
                     </div>
                     <div>
@@ -164,6 +255,28 @@ export default function SettingsPage() {
                         value={formData.lastName}
                         onChange={handleInputChange}
                         className="w-full"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="educationLevel" className="block text-sm font-medium text-gray-700 mb-1">
+                        Nivel de educație
+                      </label>
+                      <SearchableDropdown
+                        useQueryHook={useEducationalLevels}
+                        value={formData.educationLevelId}
+                        onChange={(value) => {
+                          // Handle the value correctly based on its type
+                          if (typeof value === 'number' || value === null) {
+                            setFormData(prev => ({
+                              ...prev,
+                              educationLevelId: value === null ? undefined : value
+                            }));
+                          }
+                        }}
+                        searchColumns={["name"]}
+                        valueField="id"
+                        labelField="name"
+                        placeholder="Selectează nivelul de educație"
                       />
                     </div>
                     <div className="flex justify-end">
@@ -233,222 +346,6 @@ export default function SettingsPage() {
                     </div>
                   </div>
                 </form>
-              </div>
-            )}
-
-            {/* Notifications Section */}
-            {activeSection === "notificari" && (
-              <div>
-                <h2 className="text-xl font-semibold mb-4">Notificări</h2>
-
-                <form onSubmit={handleSaveNotifications}>
-                  <div className="space-y-6">
-                    <div className="space-y-4">
-                      <div className="flex items-start">
-                        <Checkbox
-                          id="resourceEvaluated"
-                          checked={notificationSettings.resourceEvaluated}
-                          onCheckedChange={(checked) =>
-                            setNotificationSettings((prev) => ({ ...prev, resourceEvaluated: checked as boolean }))
-                          }
-                          className="mt-1"
-                        />
-                        <label htmlFor="resourceEvaluated" className="ml-2 block text-sm">
-                          Primesc notificări când o resursă este evaluată
-                        </label>
-                      </div>
-
-                      <div className="flex items-start">
-                        <Checkbox
-                          id="platformNews"
-                          checked={notificationSettings.platformNews}
-                          onCheckedChange={(checked) =>
-                            setNotificationSettings((prev) => ({ ...prev, platformNews: checked as boolean }))
-                          }
-                          className="mt-1"
-                        />
-                        <label htmlFor="platformNews" className="ml-2 block text-sm">
-                          Vreau să fiu la curent cu noutățile platformei
-                        </label>
-                      </div>
-
-                      <div className="flex items-start">
-                        <Checkbox
-                          id="updates"
-                          checked={notificationSettings.updates}
-                          onCheckedChange={(checked) =>
-                            setNotificationSettings((prev) => ({ ...prev, updates: checked as boolean }))
-                          }
-                          className="mt-1"
-                        />
-                        <label htmlFor="updates" className="ml-2 block text-sm">
-                          Anunță-mă despre actualizări sau mentenanță
-                        </label>
-                      </div>
-                    </div>
-
-                    <div className="pt-4 border-t">
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <h3 className="font-medium">Mod vacanță</h3>
-                          <p className="text-sm text-gray-500">Suspendă notificările temporar până la reactivare.</p>
-                        </div>
-                        <Switch
-                          checked={notificationSettings.vacationMode}
-                          onCheckedChange={(checked) =>
-                            setNotificationSettings((prev) => ({ ...prev, vacationMode: checked }))
-                          }
-                        />
-                      </div>
-                    </div>
-
-                    <div className="flex justify-end">
-                      <Button type="submit" className="bg-blue-500 text-white hover:bg-blue-600">
-                        Salvează
-                      </Button>
-                    </div>
-                  </div>
-                </form>
-              </div>
-            )}
-
-            {/* Other Options Section */}
-            {activeSection === "alte-optiuni" && (
-              <div>
-                <h2 className="text-xl font-semibold mb-4">Alte opțiuni</h2>
-
-                <div className="space-y-6">
-                  {/* Two-Factor Authentication */}
-                  <div className="border rounded-lg p-4">
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <h3 className="font-medium">Verificare în 2 pași</h3>
-                        <p className="text-sm text-gray-500">Confirmați noile autentificări cu un cod de 4 cifre</p>
-                      </div>
-                      <Button variant="outline" size="sm" onClick={() => setActiveSection("verificare-doi-pasi")}>
-                        <span className="sr-only">Configurare</span>
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          width="24"
-                          height="24"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          className="h-4 w-4"
-                        >
-                          <polyline points="9 18 15 12 9 6"></polyline>
-                        </svg>
-                      </Button>
-                    </div>
-                  </div>
-
-                  {/* Account Activity */}
-                  <div className="border rounded-lg p-4">
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <h3 className="font-medium">Activitatea contului</h3>
-                        <p className="text-sm text-gray-500">Gestionează dispozitivele tale conectate</p>
-                      </div>
-                      <Button variant="outline" size="sm">
-                        <span className="sr-only">Configurare</span>
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          width="24"
-                          height="24"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          className="h-4 w-4"
-                        >
-                          <polyline points="9 18 15 12 9 6"></polyline>
-                        </svg>
-                      </Button>
-                    </div>
-                  </div>
-
-                  {/* Delete Account */}
-                  <div className="border rounded-lg p-4">
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <h3 className="font-medium">Șterge contul</h3>
-                      </div>
-                      <Button variant="outline" size="sm">
-                        <span className="sr-only">Configurare</span>
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          width="24"
-                          height="24"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          className="h-4 w-4"
-                        >
-                          <polyline points="9 18 15 12 9 6"></polyline>
-                        </svg>
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Two-Factor Authentication Details */}
-            {activeSection === "verificare-doi-pasi" && (
-              <div>
-                <h2 className="text-xl font-semibold mb-4">Verificare în 2 pași</h2>
-                <p className="text-gray-600 mb-6">
-                  Îți vom trimite un cod SMS de 4 cifre atunci când se va încerca logarea în contul tău.
-                </p>
-
-                <div className="mb-6">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="font-medium">+470 (***) ***29</span>
-                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="24"
-                        height="24"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        className="h-3 w-3 mr-1"
-                      >
-                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                        <polyline points="22 4 12 14.01 9 11.01"></polyline>
-                      </svg>
-                      Verificat
-                    </span>
-                  </div>
-                  <Button variant="outline" size="sm">
-                    Schimbă
-                  </Button>
-                </div>
-
-                <div className="flex items-center justify-between pt-4 border-t">
-                  <div>
-                    <h3 className="font-medium">Activează verificarea în 2 pași</h3>
-                  </div>
-                  <Switch checked={twoFactorEnabled} onCheckedChange={setTwoFactorEnabled} />
-                </div>
-
-                <div className="flex justify-end mt-6">
-                  <Button variant="outline" className="mr-2" onClick={() => setActiveSection("alte-optiuni")}>
-                    Înapoi
-                  </Button>
-                  <Button className="bg-blue-500 text-white hover:bg-blue-600">Salvează</Button>
-                </div>
               </div>
             )}
           </Card>

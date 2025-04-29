@@ -61,7 +61,7 @@ export function ChipDismissible({ onDismiss, children, ...props }: ChipDismissib
 }
 
 interface ChipTagProps extends Omit<ChipProps, "variant" | "selected" | "onDismiss"> {
-  tag: "cursant" | "mentor" | "evaluator" | "moderator" | "admin"
+  tag: "cursant" | "formator" | "evaluator" | "moderator" | "admin"
   selected?: boolean
   onSelect?: (tag: string, selected: boolean) => void
 }

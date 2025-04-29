@@ -3,9 +3,11 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google"
 import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from "next-themes";
-import { AuthProvider } from "@/lib/auth-context"
 import { QueryProvider } from "@/lib/query-provider";
 import { RefetchProvider } from "@/lib/refetch-context";
+import { ToastRedirectHandler } from "@/components/ui/toast-redirect-handler";
+import { AuthRedirectGuard } from "@/components/auth-guard";
+import { AuthProvider } from "@/lib/auth-context";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -32,16 +34,18 @@ export default function RootLayout({
       <body
         className={`${inter.variable} antialiased bg-lightest dark:bg-lightest`}
       >
-        <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
+        <QueryProvider>
           <AuthProvider>
-            <QueryProvider>
-              <RefetchProvider>
+            <RefetchProvider>
+              <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
+                <AuthRedirectGuard />
                 {children}
-              </RefetchProvider>
-            </QueryProvider>
-            <Toaster />
+                <Toaster />
+                <ToastRedirectHandler />
+              </ThemeProvider>
+            </RefetchProvider>
           </AuthProvider>
-        </ThemeProvider>
+        </QueryProvider>
       </body>
     </html>
   );
