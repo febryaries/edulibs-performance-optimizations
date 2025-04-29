@@ -7,8 +7,7 @@ import { format } from "date-fns"
 import { ro } from "date-fns/locale"
 import { useCurricularAreasCrud, CurricularArea, useCurricularAreasController } from "@/hooks/use-controllers"
 import { Button } from "@/components/ui/button"
-import { PlusCircle, Upload } from "lucide-react"
-import { AddBulkCurricularAreaDialog } from "@/components/nomenclature/add-bulk-curricular-area-dialog"
+import { Upload } from "lucide-react"
 
 export default function AriiCurricularePage() {
   // Get controllers

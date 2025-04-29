@@ -13,7 +13,7 @@ import { toast } from "@/components/ui/use-toast";
 import { ResourceEvaluation, useResourceEvaluationsController, useResourceEvaluationsCrud, useResourcesCrud } from "@/hooks/use-controllers"
 import { PaginationParams, UsePaginatedHook } from "@/lib/query-controller"
 import { useCallback, useMemo, useState } from "react"
-import { generateAnnex3, generateAnnex6 } from "@/lib/generator"
+import { useAnexa3, useAnexa6 } from "@/hooks/use-anexe"
 
 interface ResourceViewerProps {
   resource: any
@@ -29,29 +29,29 @@ export function ResourceViewer({ resource: resourceProp, onClose, onToggleFullSc
   const { useById: useResourceById, useUpdate: updateResource } = useResourcesCrud();
   const { useCreate: createEvaluation, useList: useResourceEvaluations } = useResourceEvaluationsCrud();
 
-  const defaultEvaluationsFilters  = useCallback((params?: PaginationParams): PaginationParams => {
+  const defaultEvaluationsFilters = useCallback((params?: PaginationParams): PaginationParams => {
     return {
-      ...(params || {pageSize: 10}),
-      filters: resourceProp.id ? [ { column: 'resource_id', operator: 'eq', value: resourceProp.id } ] : []
+      ...(params || { pageSize: 10 }),
+      filters: resourceProp.id ? [{ column: 'resource_id', operator: 'eq', value: resourceProp.id }] : []
     }
-  },[resourceProp.id])
+  }, [resourceProp.id])
 
   const useEvaluations: UsePaginatedHook<ResourceEvaluation> = (params) => useResourceEvaluations({
-    ...(params || {pageSize: 10}),
-    filters: resourceProp.id ? [ { column: 'resource_id', operator: 'eq', value: resourceProp.id } ] : []
+    ...(params || { pageSize: 10 }),
+    filters: resourceProp.id ? [{ column: 'resource_id', operator: 'eq', value: resourceProp.id }] : []
   });
   const useEvaluationsController = () => useResourceEvaluationsController();
 
   // Fetch evaluations data
   const { data: evaluationsData } = useResourceEvaluations({
     pageSize: 10,
-    filters: resourceProp.id ? [ { column: 'resource_id', operator: 'eq', value: resourceProp.id } ] : []
+    filters: resourceProp.id ? [{ column: 'resource_id', operator: 'eq', value: resourceProp.id }] : []
   });
-  
+
   // Get the latest evaluation
   const latestEvaluation = useMemo(() => {
     if (!evaluationsData?.data || evaluationsData.data.length === 0) return null;
-    
+
     // Sort evaluations by date (newest first) and get the first one
     return [...evaluationsData.data]
       .filter(evaluation => evaluation !== null) // Filter out null values
@@ -71,8 +71,9 @@ export function ResourceViewer({ resource: resourceProp, onClose, onToggleFullSc
   const { data: resource } = useResourceById(resourceProp.id);
   const { user } = useAuth();
 
-  const [isGeneratingDocument, setIsGeneratingDocument] = useState(false);
-  const [isGeneratingEvaluationDocument, setIsGeneratingEvaluationDocument] = useState(false);
+  // Use the anexa hooks
+  const { isGenerating: isGeneratingAnexa3, generateDocument: generateAnexa3Document } = useAnexa3();
+  const { isGenerating: isGeneratingAnexa6, generateDocument: generateAnexa6Document } = useAnexa6();
 
   // Permissions
   const canEdit = (isOwner(user, resource) && ["DRAFT", "UNCONFORMABLE"].includes(String(resource?.status))) || isAdmin(user);
@@ -131,94 +132,64 @@ export function ResourceViewer({ resource: resourceProp, onClose, onToggleFullSc
 
   // Handle document generation and download
   const handleGenerateDocument = async () => {
-    try {
-      setIsGeneratingDocument(true);
-      
-      // Map resource data to gen3Schema format
-      const documentData = {
-        serial_number: resource?.serial_number || 0,
-        title: resource?.title || "",
-        discipline: resource?.discipline?.name || "",
-        competency: resource?.specific_competency?.name || "",
-        class: resource?.class?.name || "",
-        author: `${resource?.author?.first_name || ""} ${resource?.author?.last_name || ""}`,
-        duration: resource?.durata || "1 oră",
-        description: resource?.description || "",
-        comments: resource?.comentarii || "",
-        aggregate: resource?.aggregate || "",
-        today: new Date(),
-      };
-      
-      await generateAnnex3(documentData);
-      
-      toast({
-        title: "Succes",
-        description: "Fișa descriptivă a fost generată și descărcată cu succes.",
-      });
-    } catch (error) {
-      console.error("Error generating document:", error);
-      toast({
-        title: "Eroare",
-        description: "A apărut o eroare la generarea fișei descriptive.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsGeneratingDocument(false);
-    }
+    // Map resource data to gen3Schema format
+    const documentData = {
+      serial_number: resource?.serial_number || 0,
+      title: resource?.title || "",
+      discipline: resource?.discipline?.name || "",
+      competency: resource?.specific_competency?.name || "",
+      class: resource?.class?.name || "",
+      author: `${resource?.author?.first_name || ""} ${resource?.author?.last_name || ""}`,
+      duration: resource?.durata || "1 oră",
+      description: resource?.description || "",
+      comments: resource?.comentarii || "",
+      aggregate: resource?.aggregate || "",
+      today: new Date(),
+    };
+
+    await generateAnexa3Document(documentData);
   };
 
   // Handle evaluation document generation and download
   const handleGenerateEvaluationDocument = async () => {
-    try {
-      setIsGeneratingEvaluationDocument(true);
-      
-      if (!latestEvaluation) {
-        throw new Error("Nu există o evaluare disponibilă");
-      }
-      
-      // Map resource and evaluation data to gen6Schema format
-      const documentData = {
-        serial_number: resource?.serial_number || 0,
-        title: resource?.title || "",
-        author: `${resource?.author?.first_name || ""} ${resource?.author?.last_name || ""}`,
-        class: resource?.class?.name || "",
-        discipline: resource?.discipline?.name || "",
-        curricular_area: "", // This field doesn't exist on resource, using empty string
-        domain: "", // This field doesn't exist on resource, using empty string
-        specific_competency: resource?.specific_competency?.name || "",
-        concordance_comment_yes: latestEvaluation.concordance_ok === true ? (latestEvaluation.concordance_comment || "") : "",
-        concordance_comment_no: latestEvaluation.concordance_ok === false ? (latestEvaluation.concordance_comment || "") : "",
-        relevance_comment_yes: latestEvaluation.relevance_ok === true ? (latestEvaluation.relevance_comment || "") : "",
-        relevance_comment_no: latestEvaluation.relevance_ok === false ? (latestEvaluation.relevance_comment || "") : "",
-        accessibility_comment_yes: latestEvaluation.accessibility_ok === true ? (latestEvaluation.accessibility_comment || "") : "",
-        accessibility_comment_no: latestEvaluation.accessibility_ok === false ? (latestEvaluation.accessibility_comment || "") : "",
-        correctness_comment_yes: latestEvaluation.correctness_ok === true ? (latestEvaluation.correctness_comment || "") : "",
-        correctness_comment_no: latestEvaluation.correctness_ok === false ? (latestEvaluation.correctness_comment || "") : "",
-        value_comment_yes: latestEvaluation.value_ok === true ? (latestEvaluation.value_comment || "") : "",
-        value_comment_no: latestEvaluation.value_ok === false ? (latestEvaluation.value_comment || "") : "",
-        quality_comment_yes: latestEvaluation.quality_ok === true ? (latestEvaluation.quality_comment || "") : "",
-        quality_comment_no: latestEvaluation.quality_ok === false ? (latestEvaluation.quality_comment || "") : "",
-        evaluation_date: latestEvaluation?.updated_at ? new Date(latestEvaluation.updated_at) : new Date(),
-      };
-      
-      await generateAnnex6(documentData);
-      
-      toast({
-        title: "Succes",
-        description: "Fișa de evaluare a fost generată și descărcată cu succes.",
-      });
-    } catch (error) {
-      console.error("Error generating evaluation document:", error);
+    if (!latestEvaluation) {
       toast({
         title: "Eroare",
-        description: "A apărut o eroare la generarea fișei de evaluare.",
+        description: "Nu există o evaluare disponibilă",
         variant: "destructive",
       });
-    } finally {
-      setIsGeneratingEvaluationDocument(false);
+      return;
     }
+
+    // Map resource and evaluation data to gen6Schema format
+    const documentData = {
+      serial_number: resource?.serial_number || 0,
+      title: resource?.title || "",
+      author: `${resource?.author?.first_name || ""} ${resource?.author?.last_name || ""}`,
+      class: resource?.class?.name || "",
+      discipline: resource?.discipline?.name || "",
+      curricular_area: "", // This field doesn't exist on resource, using empty string
+      domain: "", // This field doesn't exist on resource, using empty string
+      specific_competency: resource?.specific_competency?.name || "",
+      concordance_comment_yes: typeof latestEvaluation?.concordance_ok === 'boolean' && latestEvaluation.concordance_ok ? (latestEvaluation.concordance_comment || "") : "",
+      concordance_comment_no: typeof latestEvaluation?.concordance_ok === 'boolean' && !latestEvaluation.concordance_ok ? (latestEvaluation.concordance_comment || "") : "",
+      relevance_comment_yes: typeof latestEvaluation?.relevance_ok === 'boolean' && latestEvaluation.relevance_ok ? (latestEvaluation.relevance_comment || "") : "",
+      relevance_comment_no: typeof latestEvaluation?.relevance_ok === 'boolean' && !latestEvaluation.relevance_ok ? (latestEvaluation.relevance_comment || "") : "",
+      accessibility_comment_yes: typeof latestEvaluation?.accessibility_ok === 'boolean' && latestEvaluation.accessibility_ok ? (latestEvaluation.accessibility_comment || "") : "",
+      accessibility_comment_no: typeof latestEvaluation?.accessibility_ok === 'boolean' && !latestEvaluation.accessibility_ok ? (latestEvaluation.accessibility_comment || "") : "",
+      correctness_comment_yes: typeof latestEvaluation?.correctness_ok === 'boolean' && latestEvaluation.correctness_ok ? (latestEvaluation.correctness_comment || "") : "",
+      correctness_comment_no: typeof latestEvaluation?.correctness_ok === 'boolean' && !latestEvaluation.correctness_ok ? (latestEvaluation.correctness_comment || "") : "",
+      value_comment_yes: typeof latestEvaluation?.value_ok === 'boolean' && latestEvaluation.value_ok ? (latestEvaluation.value_comment || "") : "",
+      value_comment_no: typeof latestEvaluation?.value_ok === 'boolean' && !latestEvaluation.value_ok ? (latestEvaluation.value_comment || "") : "",
+      quality_comment_yes: typeof latestEvaluation?.quality_ok === 'boolean' && latestEvaluation.quality_ok ? (latestEvaluation.quality_comment || "") : "",
+      quality_comment_no: typeof latestEvaluation?.quality_ok === 'boolean' && !latestEvaluation.quality_ok ? (latestEvaluation.quality_comment || "") : "",
+      evaluation_date: latestEvaluation?.updated_at ? new Date(latestEvaluation.updated_at) : new Date(),
+    };
+
+    await generateAnexa6Document(documentData);
   };
 
+  // Handle open review
   function handleOpenReview(row: any) {
     console.log("[LOG] handleOpenReview ::", openReviewSheet)
     if (openReviewSheet) {
@@ -340,19 +311,36 @@ export function ResourceViewer({ resource: resourceProp, onClose, onToggleFullSc
         <h1 className="text-2xl font-bold text-gray-900 mb-6">{resource?.title}</h1>
 
         <div className="flex flex-wrap gap-4 mb-6">
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             className="flex items-center gap-2"
             onClick={handleGenerateDocument}
-            disabled={isGeneratingDocument}
+            disabled={isGeneratingAnexa3}
           >
-            {isGeneratingDocument ? (
+            {isGeneratingAnexa3 ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <Download className="h-4 w-4" />
             )}
-            {isGeneratingDocument ? "Generare..." : "Descarcă fișa descriptivă"}
+            {isGeneratingAnexa3 ? "Generare..." : "Descarcă fișa descriptivă"}
           </Button>
+
+          <div className="mb-6">
+            <Button
+              variant="outline"
+              className="flex items-center gap-2"
+              onClick={handleGenerateEvaluationDocument}
+              disabled={isGeneratingAnexa6}
+            >
+              {isGeneratingAnexa6 ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4" />
+              )}
+              {isGeneratingAnexa6 ? "Generare..." : "Descarca fisa evaluare"}
+            </Button>
+          </div>
+
           {canEvaluate && resource?.status === "IN_REVIEW" && (!latestEvaluation || latestEvaluation.status !== "IN_PROGRESS") && (
             <Button className="bg-blue-600 hover:bg-blue-700" onClick={handleCreateEvaluation}>
               Evaluează
@@ -521,21 +509,7 @@ export function ResourceViewer({ resource: resourceProp, onClose, onToggleFullSc
               <div className="text-gray-500 text-center py-8">Nu există istoric de evaluări</div>
             ) : (
               <>
-                <div className="mb-6">
-                  <Button 
-                    variant="outline" 
-                    className="flex items-center gap-2"
-                    onClick={handleGenerateEvaluationDocument}
-                    disabled={isGeneratingEvaluationDocument}
-                  >
-                    {isGeneratingEvaluationDocument ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Download className="h-4 w-4" />
-                    )}
-                    {isGeneratingEvaluationDocument ? "Generare..." : "Descarca fisa evaluare"}
-                  </Button>
-                </div>
+
                 <Accordion type="single" collapsible className="w-full">
                   {/* Concordanța cu programa școlară */}
                   <AccordionItem value="item-1" className={`border rounded-lg mb-4 overflow-hidden ${typeof latestEvaluation?.concordance_ok === 'boolean' && latestEvaluation.concordance_ok ? '' : 'border-red-500'}`}>
@@ -564,12 +538,13 @@ export function ResourceViewer({ resource: resourceProp, onClose, onToggleFullSc
                             <div>
                               <div className="font-medium text-sm">Comentariu evaluator</div>
                               <div className="text-sm text-gray-600">
-                                {latestEvaluation.concordance_comment !== null && latestEvaluation.concordance_comment !== undefined ? latestEvaluation.concordance_comment || "Nu există comentarii pentru această secțiune" : "Nu există comentarii pentru această secțiune"}
+                                {typeof latestEvaluation.concordance_comment === 'string' ? latestEvaluation.concordance_comment || "Nu există comentarii pentru această secțiune" : "Nu există comentarii pentru această secțiune"}
                               </div>
                             </div>
                           </div>
                         </div>
                       </div>
+                      <div className="h-24"></div>
                     </AccordionContent>
                   </AccordionItem>
 
@@ -600,12 +575,13 @@ export function ResourceViewer({ resource: resourceProp, onClose, onToggleFullSc
                             <div>
                               <div className="font-medium text-sm">Comentariu evaluator</div>
                               <div className="text-sm text-gray-600">
-                                {latestEvaluation.relevance_comment !== null && latestEvaluation.relevance_comment !== undefined ? latestEvaluation.relevance_comment || "Nu există comentarii pentru această secțiune" : "Nu există comentarii pentru această secțiune"}
+                                {typeof latestEvaluation.relevance_comment === 'string' ? latestEvaluation.relevance_comment || "Nu există comentarii pentru această secțiune" : "Nu există comentarii pentru această secțiune"}
                               </div>
                             </div>
                           </div>
                         </div>
                       </div>
+                      <div className="h-24"></div>
                     </AccordionContent>
                   </AccordionItem>
 
@@ -618,9 +594,8 @@ export function ResourceViewer({ resource: resourceProp, onClose, onToggleFullSc
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4">
                         <div>
                           <ul className="list-disc pl-5 space-y-2 text-sm">
-                            <li>Utilizarea unui limbaj clar, corect, adecvat vârstei elevilor</li>
-                            <li>Asigurarea unui echilibru între text, imagini, elemente multimedia</li>
-                            <li>Utilizarea unor metode și strategii didactice diverse și eficiente</li>
+                            <li>Adecvarea conținutului științific, a limbajului utilizat la grupul țintă vizat (la nivelul de dezvoltare specific vârstei căreia i se adresează)</li>
+                            <li>Ușurința citirii, urmăririi și înțelegerii conținutului resursei (având în vedere, densitatea informațiilor, text scris, mesaj în format audio, ritmul de prezentare, timpul de redare pe secvență)</li>
                           </ul>
                         </div>
                         <div className={`p-4 rounded-md ${typeof latestEvaluation?.accessibility_ok === 'boolean' && latestEvaluation.accessibility_ok ? 'bg-gray-50' : 'bg-red-50'}`}>
@@ -631,12 +606,13 @@ export function ResourceViewer({ resource: resourceProp, onClose, onToggleFullSc
                             <div>
                               <div className="font-medium text-sm">Comentariu evaluator</div>
                               <div className="text-sm text-gray-600">
-                                {latestEvaluation.accessibility_comment !== null && latestEvaluation.accessibility_comment !== undefined ? latestEvaluation.accessibility_comment || "Nu există comentarii pentru această secțiune" : "Nu există comentarii pentru această secțiune"}
+                                {typeof latestEvaluation.accessibility_comment === 'string' ? latestEvaluation.accessibility_comment || "Nu există comentarii pentru această secțiune" : "Nu există comentarii pentru această secțiune"}
                               </div>
                             </div>
                           </div>
                         </div>
                       </div>
+                      <div className="h-24"></div>
                     </AccordionContent>
                   </AccordionItem>
 
@@ -649,9 +625,9 @@ export function ResourceViewer({ resource: resourceProp, onClose, onToggleFullSc
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4">
                         <div>
                           <ul className="list-disc pl-5 space-y-2 text-sm">
-                            <li>Corectitudinea științifică a informațiilor prezentate</li>
-                            <li>Corectitudinea gramaticală și ortografică</li>
-                            <li>Evitarea stereotipurilor, prejudecăților și discriminărilor</li>
+                            <li>Corectitudinea științifică a conținutului resursei</li>
+                            <li>Corectitudinea tehnoredactării</li>
+                            <li>Claritatea și coerența prezentării</li>
                           </ul>
                         </div>
                         <div className={`p-4 rounded-md ${typeof latestEvaluation?.correctness_ok === 'boolean' && latestEvaluation.correctness_ok ? 'bg-gray-50' : 'bg-red-50'}`}>
@@ -662,27 +638,28 @@ export function ResourceViewer({ resource: resourceProp, onClose, onToggleFullSc
                             <div>
                               <div className="font-medium text-sm">Comentariu evaluator</div>
                               <div className="text-sm text-gray-600">
-                                {latestEvaluation.correctness_comment !== null && latestEvaluation.correctness_comment !== undefined ? latestEvaluation.correctness_comment || "Nu există comentarii pentru această secțiune" : "Nu există comentarii pentru această secțiune"}
+                                {typeof latestEvaluation.correctness_comment === 'string' ? latestEvaluation.correctness_comment || "Nu există comentarii pentru această secțiune" : "Nu există comentarii pentru această secțiune"}
                               </div>
                             </div>
                           </div>
                         </div>
                       </div>
+                      <div className="h-24"></div>
                     </AccordionContent>
                   </AccordionItem>
 
-                  {/* Inovare */}
+                  {/* Valoarea pentru învățare */}
                   <AccordionItem value="item-5" className={`border rounded-lg mb-4 overflow-hidden ${typeof latestEvaluation?.innovation_ok === 'boolean' && latestEvaluation.innovation_ok ? '' : 'border-red-500'}`}>
                     <AccordionTrigger className={`px-4 py-3 hover:no-underline ${typeof latestEvaluation?.innovation_ok === 'boolean' && latestEvaluation.innovation_ok ? '' : 'text-red-600'}`}>
-                      <span className="font-medium text-base">Inovare</span>
+                      <span className="font-medium text-base">Valoarea pentru învățare/Deschideri pentru învățare autentică</span>
                     </AccordionTrigger>
                     <AccordionContent className="border-t">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4">
                         <div>
                           <ul className="list-disc pl-5 space-y-2 text-sm">
-                            <li>Originalitatea abordării</li>
-                            <li>Promovarea gândirii critice, a creativității și a inovării</li>
-                            <li>Utilizarea tehnologiei digitale pentru a crea eficiența învățării</li>
+                            <li>Stimularea gândirii critice, a creativității elevilor</li>
+                            <li>Facilitarea relaționării cu alte domenii ale cunoașterii, deschiderea spre inter- și transdisciplinaritate</li>
+                            <li>Valorificarea unor elemente anterior utilizate/cunoscute într-o formă nouă, inedită</li>
                           </ul>
                         </div>
                         <div className={`p-4 rounded-md ${typeof latestEvaluation?.innovation_ok === 'boolean' && latestEvaluation.innovation_ok ? 'bg-gray-50' : 'bg-red-50'}`}>
@@ -693,27 +670,27 @@ export function ResourceViewer({ resource: resourceProp, onClose, onToggleFullSc
                             <div>
                               <div className="font-medium text-sm">Comentariu evaluator</div>
                               <div className="text-sm text-gray-600">
-                                {latestEvaluation.innovation_comment !== null && latestEvaluation.innovation_comment !== undefined ? latestEvaluation.innovation_comment || "Nu există comentarii pentru această secțiune" : "Nu există comentarii pentru această secțiune"}
+                                {typeof latestEvaluation.innovation_comment === 'string' ? latestEvaluation.innovation_comment || "Nu există comentarii pentru această secțiune" : "Nu există comentarii pentru această secțiune"}
                               </div>
                             </div>
                           </div>
                         </div>
                       </div>
+                      <div className="h-24"></div>
                     </AccordionContent>
                   </AccordionItem>
 
                   {/* Calitate */}
                   <AccordionItem value="item-6" className={`border rounded-lg mb-4 overflow-hidden ${typeof latestEvaluation?.quality_ok === 'boolean' && latestEvaluation.quality_ok ? '' : 'border-red-500'}`}>
                     <AccordionTrigger className={`px-4 py-3 hover:no-underline ${typeof latestEvaluation?.quality_ok === 'boolean' && latestEvaluation.quality_ok ? '' : 'text-red-600'}`}>
-                      <span className="font-medium text-base">Calitate</span>
+                      <span className="font-medium text-base">Calitatea proiectării și realizării resursei</span>
                     </AccordionTrigger>
                     <AccordionContent className="border-t">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4">
                         <div>
                           <ul className="list-disc pl-5 space-y-2 text-sm">
-                            <li>Calitatea materialelor utilizate (text, imagini, video, etc.)</li>
-                            <li>Calitatea tehnică a resurselor (rezoluție, claritate, etc.)</li>
-                            <li>Respectarea drepturilor de autor și a licențelor</li>
+                            <li>Susținerea unei învățări atractive cu rol de optimizare a învățării prin modul de proiectare propus de resursă (de exemplu: durata fiecărei secvențe, durata resursei, dimensiunea și fontul textului, imagini -- număr, tip, claritate, adecvare la conținut --, culori, material audio, unitatea stilistică)</li>
+                            <li>Excluderea oricărei forme de discriminare</li>
                           </ul>
                         </div>
                         <div className={`p-4 rounded-md ${typeof latestEvaluation?.quality_ok === 'boolean' && latestEvaluation.quality_ok ? 'bg-gray-50' : 'bg-red-50'}`}>
@@ -724,15 +701,18 @@ export function ResourceViewer({ resource: resourceProp, onClose, onToggleFullSc
                             <div>
                               <div className="font-medium text-sm">Comentariu evaluator</div>
                               <div className="text-sm text-gray-600">
-                                {latestEvaluation.quality_comment !== null && latestEvaluation.quality_comment !== undefined ? latestEvaluation.quality_comment || "Nu există comentarii pentru această secțiune" : "Nu există comentarii pentru această secțiune"}
+                                {typeof latestEvaluation.quality_comment === 'string' ? latestEvaluation.quality_comment || "Nu există comentarii pentru această secțiune" : "Nu există comentarii pentru această secțiune"}
                               </div>
                             </div>
                           </div>
                         </div>
                       </div>
+                      <div className="h-24"></div>
                     </AccordionContent>
                   </AccordionItem>
                 </Accordion>
+                {/* Add extra spacing at the bottom */}
+              
               </>
             )}
           </TabsContent>

@@ -8,6 +8,7 @@ import { RefetchProvider } from "@/lib/refetch-context";
 import { ToastRedirectHandler } from "@/components/ui/toast-redirect-handler";
 import { AuthRedirectGuard } from "@/components/auth-guard";
 import { AuthProvider } from "@/lib/auth-context";
+import { Suspense } from "react";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -41,7 +42,9 @@ export default function RootLayout({
                 <AuthRedirectGuard />
                 {children}
                 <Toaster />
-                <ToastRedirectHandler />
+                <Suspense fallback={null}>
+                  <ToastRedirectHandler />
+                </Suspense>
               </ThemeProvider>
             </RefetchProvider>
           </AuthProvider>

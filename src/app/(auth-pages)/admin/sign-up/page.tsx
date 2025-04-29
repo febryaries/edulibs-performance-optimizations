@@ -17,7 +17,6 @@ export default function AdminSignUpPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [confirmPassword, setConfirmPassword] = useState("")
   const { signUpWithEmail } = useAuth()
-  const router = useRouter()
   const { toast } = useToast()
 
   const handleSubmit = async (e: React.FormEvent) => {

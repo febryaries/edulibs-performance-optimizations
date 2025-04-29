@@ -5,7 +5,7 @@ import { useAuth } from "@/lib/auth-context"
 import { toast } from "@/components/ui/use-toast"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Download, X, Maximize2, Save, ArrowLeft } from "lucide-react"
+import { Download, X, Maximize2, Save, ArrowLeft, Loader2 } from "lucide-react"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
@@ -16,6 +16,8 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Database } from "../../utils/database.types"
 import { ResourceEvaluation, ResourceEvaluationInsert, useResourceEvaluationsCrud, useResourcesCrud } from "@/hooks/use-controllers"
 import { useEffect } from "react"
+import { useAnexa3, useAnexa6 } from "@/hooks/use-anexe"
+
 interface ResourceReviewProps {
   resource: { id: string };
   evaluationId: string
@@ -37,6 +39,9 @@ export function ResourceReview({
   const { useById: useResourceById, useUpdate: useUpdateResourceEvaluation } = useResourcesCrud();
   const { useById: useResourceEvaluationById, useUpdate: updateEvaluation } = useResourceEvaluationsCrud();
 
+  // Use the anexa hooks
+  const { isGenerating: isGeneratingAnexa3, generateDocument: generateAnexa3Document } = useAnexa3();
+  const { isGenerating: isGeneratingAnexa6, generateDocument: generateAnexa6Document } = useAnexa6();
 
   const { data: resource } = useResourceById(resourceProp.id);
   const { data: evaluation } = useResourceEvaluationById(evaluationId)
@@ -71,6 +76,7 @@ export function ResourceReview({
       accessibility_ok: evaluation?.accessibility_ok || false,
       correctness_ok: evaluation?.correctness_ok || false,
       quality_ok: evaluation?.quality_ok || false,
+      value_ok: evaluation?.value_ok || false,
     }
   });
 
@@ -93,6 +99,7 @@ export function ResourceReview({
       if (evaluation.accessibility_ok !== null) form.setValue("accessibility_ok", evaluation.accessibility_ok);
       if (evaluation.correctness_ok !== null) form.setValue("correctness_ok", evaluation.correctness_ok);
       if (evaluation.quality_ok !== null) form.setValue("quality_ok", evaluation.quality_ok);
+      if (evaluation.value_ok !== null) form.setValue("value_ok", evaluation.value_ok);
     }
   }, [evaluation, form.setValue]);
 
@@ -109,6 +116,65 @@ export function ResourceReview({
         toast({ title: "Eroare", description: error as string || "A apărut o eroare la salvare.", variant: "destructive" });
       }
     });
+  };
+
+  // Handle document generation and download
+  const handleGenerateDocument = async () => {
+    // Map resource data to gen3Schema format
+    const documentData = {
+      serial_number: resource?.serial_number || 0,
+      title: resource?.title || "",
+      discipline: resource?.discipline?.name || "",
+      competency: resource?.specific_competency?.name || "",
+      class: resource?.class?.name || "",
+      author: `${resource?.author?.first_name || ""} ${resource?.author?.last_name || ""}`,
+      duration: resource?.durata || "",
+      description: resource?.description || "",
+      comments: resource?.comentarii || "",
+      aggregate: resource?.aggregate || "",
+      today: new Date(),
+    };
+    
+    await generateAnexa3Document(documentData);
+  };
+
+  // Handle evaluation document generation and download
+  const handleGenerateEvaluationDocument = async () => {
+    if (!evaluation) {
+      toast({
+        title: "Eroare",
+        description: "Nu există o evaluare disponibilă",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Map resource and evaluation data to gen6Schema format
+    const documentData = {
+      serial_number: resource?.serial_number || 0,
+      title: resource?.title || "",
+      author: `${resource?.author?.first_name || ""} ${resource?.author?.last_name || ""}`,
+      class: resource?.class?.name || "",
+      discipline: resource?.discipline?.name || "",
+      curricular_area: "", // This field doesn't exist on resource, using empty string
+      domain: "", // This field doesn't exist on resource, using empty string
+      specific_competency: resource?.specific_competency?.name || "",
+      concordance_comment_yes: typeof evaluation?.concordance_ok === 'boolean' && evaluation.concordance_ok ? (evaluation.concordance_comment || "") : "",
+      concordance_comment_no: typeof evaluation?.concordance_ok === 'boolean' && !evaluation.concordance_ok ? (evaluation.concordance_comment || "") : "",
+      relevance_comment_yes: typeof evaluation?.relevance_ok === 'boolean' && evaluation.relevance_ok ? (evaluation.relevance_comment || "") : "",
+      relevance_comment_no: typeof evaluation?.relevance_ok === 'boolean' && !evaluation.relevance_ok ? (evaluation.relevance_comment || "") : "",
+      accessibility_comment_yes: typeof evaluation?.accessibility_ok === 'boolean' && evaluation.accessibility_ok ? (evaluation.accessibility_comment || "") : "",
+      accessibility_comment_no: typeof evaluation?.accessibility_ok === 'boolean' && !evaluation.accessibility_ok ? (evaluation.accessibility_comment || "") : "",
+      correctness_comment_yes: typeof evaluation?.correctness_ok === 'boolean' && evaluation.correctness_ok ? (evaluation.correctness_comment || "") : "",
+      correctness_comment_no: typeof evaluation?.correctness_ok === 'boolean' && !evaluation.correctness_ok ? (evaluation.correctness_comment || "") : "",
+      value_comment_yes: typeof evaluation?.value_ok === 'boolean' && evaluation.value_ok ? (evaluation.value_comment || "") : "",
+      value_comment_no: typeof evaluation?.value_ok === 'boolean' && !evaluation.value_ok ? (evaluation.value_comment || "") : "",
+      quality_comment_yes: typeof evaluation?.quality_ok === 'boolean' && evaluation.quality_ok ? (evaluation.quality_comment || "") : "",
+      quality_comment_no: typeof evaluation?.quality_ok === 'boolean' && !evaluation.quality_ok ? (evaluation.quality_comment || "") : "",
+      evaluation_date: evaluation?.updated_at ? new Date(evaluation.updated_at) : new Date(),
+    };
+    
+    await generateAnexa6Document(documentData);
   };
 
   return (
@@ -165,9 +231,32 @@ export function ResourceReview({
         <h1 className="text-2xl font-bold text-gray-900 mb-6">{resource?.title}</h1>
 
         <div className="flex flex-wrap gap-4 mb-6">
-          <Button variant="outline" className="flex items-center gap-2">
-            <Download className="h-4 w-4" />
-            Descarcă fișa descriptivă
+          <Button 
+            variant="outline" 
+            className="flex items-center gap-2"
+            onClick={handleGenerateDocument}
+            disabled={isGeneratingAnexa3}
+          >
+            {isGeneratingAnexa3 ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+            {isGeneratingAnexa3 ? "Generare..." : "Descarcă fișa descriptivă"}
+          </Button>
+
+          <Button 
+            variant="outline" 
+            className="flex items-center gap-2"
+            onClick={handleGenerateEvaluationDocument}
+            disabled={isGeneratingAnexa6}
+          >
+            {isGeneratingAnexa6 ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+            {isGeneratingAnexa6 ? "Generare..." : "Descarca fisa evaluare"}
           </Button>
         </div>
 
@@ -352,6 +441,7 @@ export function ResourceReview({
                       </div>
                     </div>
                   </div>
+                  <div className="h-24"></div>
                 </AccordionContent>
               </AccordionItem>
 
@@ -405,6 +495,7 @@ export function ResourceReview({
                       </div>
                     </div>
                   </div>
+                  <div className="h-24"></div>
                 </AccordionContent>
               </AccordionItem>
 
@@ -417,8 +508,8 @@ export function ResourceReview({
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4">
                     <div>
                       <ul className="list-disc pl-5 space-y-2 text-sm">
-                        <li>Adecvarea la vârsta elevilor (limbaj, densitatea informației)</li>
-                        <li>Structurarea conținutului pentru a facilita lectura și urmărirea informațiilor</li>
+                        <li>Adecvarea conținutului științific, a limbajului utilizat la grupul țintă vizat (la nivelul de dezvoltare specific vârstei căreia i se adresează)</li>
+                        <li>Ușurința citirii, urmăririi și înțelegerii conținutului resursei (având în vedere, densitatea informațiilor, text scris, mesaj în format audio, ritmul de prezentare, timpul de redare pe secvență)</li>
                       </ul>
                     </div>
                     <div>
@@ -450,6 +541,7 @@ export function ResourceReview({
                       </div>
                     </div>
                   </div>
+                  <div className="h-24"></div>
                 </AccordionContent>
               </AccordionItem>
 
@@ -496,6 +588,7 @@ export function ResourceReview({
                       </div>
                     </div>
                   </div>
+                  <div className="h-24"></div>
                 </AccordionContent>
               </AccordionItem>
 
@@ -511,10 +604,7 @@ export function ResourceReview({
                     <div>
                       <ul className="list-disc pl-5 space-y-2 text-sm">
                         <li>Stimularea gândirii critice, a creativității elevilor</li>
-                        <li>
-                          Facilitarea relaționării cu alte domenii ale cunoașterii, deschiderea spre inter- și
-                          transdisciplinaritate
-                        </li>
+                        <li>Facilitarea relaționării cu alte domenii ale cunoașterii, deschiderea spre inter- și transdisciplinaritate</li>
                         <li>Valorificarea unor elemente anterior utilizate/cunoscute într-o formă nouă, inedită</li>
                       </ul>
                     </div>
@@ -535,9 +625,9 @@ export function ResourceReview({
                             id="inovatie-ok" 
                             className="mr-2" 
                             disabled={!isEvaluator}
-                            checked={!!form.watch("innovation_ok")}
+                            checked={!!form.watch("value_ok")}
                             onCheckedChange={(checked) => {
-                              form.setValue("innovation_ok", !!checked, { shouldDirty: true });
+                              form.setValue("value_ok", !!checked, { shouldDirty: true });
                             }}
                           />
                           <Label htmlFor="inovatie-ok" className="text-sm font-medium text-gray-500">
@@ -547,6 +637,7 @@ export function ResourceReview({
                       </div>
                     </div>
                   </div>
+                  <div className="h-24"></div>
                 </AccordionContent>
               </AccordionItem>
 
@@ -561,8 +652,8 @@ export function ResourceReview({
                       <ul className="list-disc pl-5 space-y-2 text-sm">
                         <li>
                           Susținerea unei învățări atractive cu rol de optimizare a învățării prin modul de proiectare
-                          propus al resursei (de exemplu: durata fiecărei secvențe, durata resursei, dimensiunea și
-                          fontul textului, imagini – număr, tip, claritate, adecvare la conținut –, culori, material
+                          propus de resursă (de exemplu: durata fiecărei secvențe, durata resursei, dimensiunea și
+                          fontul textului, imagini -- număr, tip, claritate, adecvare la conținut --, culori, material
                           audio, unitatea stilistică)
                         </li>
                         <li>Excluderea oricărei forme de discriminare</li>
@@ -597,6 +688,7 @@ export function ResourceReview({
                       </div>
                     </div>
                   </div>
+                  <div className="h-24"></div>
                 </AccordionContent>
               </AccordionItem>
             </Accordion>

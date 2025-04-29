@@ -31,5 +31,5 @@
     "tailwind.config.ts",
     "plugins/**/*.ts"
   ],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "supabase"]
 }

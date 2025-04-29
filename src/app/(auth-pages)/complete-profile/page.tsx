@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useToast } from "@/components/ui/use-toast"
@@ -29,7 +29,6 @@ export default function CompleteProfilePage() {
   const { user, isInitialized, completeProfile } = useAuth()
   const router = useRouter()
   const { toast } = useToast()
-  const searchParams = useSearchParams()
   const supabase = createClient()
   const { useList: useEducationalLevels } = useEducationLevelsCrud()
 

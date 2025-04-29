@@ -18,7 +18,7 @@ const defaultAuthenticatedPath = "/dashboard"
 
 export function AuthRedirectGuard() {
 
-  const { allowedMenuKeys } = useMenu();
+  const { menuItems } = useMenu();
 
   const { session, isLoading } = useAuth()
   const router = useRouter()
@@ -33,26 +33,24 @@ export function AuthRedirectGuard() {
 
     const currentlyProtected = isProtectedRoute(pathname)
 
-    console.log('[LOG] session:', session)
-    console.log('[LOG] currentlyProtected:', currentlyProtected, window.location.pathname)
-
     if (!session && currentlyProtected) {
       // Not logged in and trying to access protected route
       console.log('[LOG] Redirecting to sign-in')
-      router.replace(signInPath)
+      return router.replace(signInPath)
     }
 
     if (session && !currentlyProtected) {
       // Logged in and on a non-protected route (e.g., /sign-in), redirect to dashboard
       console.log("[LOG] Redirecting to dashboard")
-      router.replace(defaultAuthenticatedPath)
+      return router.replace(defaultAuthenticatedPath)
     }
 
-    if (session && !allowedMenuKeys.includes(pathname)) {
-      // Logged in and on a non-allowed route, redirect to dashboard
-      console.log("[LOG] Redirecting to dashboard")
-      router.replace(defaultAuthenticatedPath)
-    }
+    // TODO: This needs to be refactored. 
+    // if (session && !menuItems.map(item => item.href).includes(pathname)) {
+    //   // Logged in and on a non-allowed route, redirect to dashboard
+    //   console.log("[LOG] filteredMenuItems Redirecting to dashboard", pathname)
+    //   return router.replace(defaultAuthenticatedPath)
+    // }
     
   }, [session, isLoading, pathname, router])
 

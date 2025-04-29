@@ -1,3 +1,5 @@
+"use client";
+
 import { BookMarked, BookOpen, Layers, Settings, Users } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useGroupsCrud, useResourcesCrud, useUsersCrud } from "./use-controllers";
@@ -70,7 +72,6 @@ export default function useMenu() {
     const allowedMenuKeys = menuConfig[normalizedRole] || menuConfig["STUDENT"]
     console.log(normalizedRole, allowedMenuKeys)
     const filteredMenuItems = menuItems.filter((item) => allowedMenuKeys.includes(item.key));
-
 
     return {
         menuItems: filteredMenuItems,

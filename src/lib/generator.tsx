@@ -3,8 +3,8 @@ import { gen3Schema } from "@/schemas/gen-3-schema";
 import { gen6Schema } from "@/schemas/gen-6-schema";
 
 // Type for the input data based on gen3Schema
-type Gen3Data = z.infer<typeof gen3Schema>;
-type Gen6Data = z.infer<typeof gen6Schema>;
+export type Gen3Data = z.infer<typeof gen3Schema>;
+export type Gen6Data = z.infer<typeof gen6Schema>;
 
 /**
  * Generates and downloads an annex document based on the provided data
