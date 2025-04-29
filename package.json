@@ -41,6 +41,7 @@
     "@radix-ui/react-tooltip": "latest",
     "@react-email/components": "^0.0.36",
     "@supabase-cache-helpers/postgrest-react-query": "^1.12.1",
+    "@supabase/auth-helpers-nextjs": "^0.10.0",
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.49.4",
     "@tanstack/react-form": "latest",
