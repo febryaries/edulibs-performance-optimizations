@@ -70,7 +70,7 @@ export default function useMenu() {
 
     // Get allowed menu keys for current role
     const allowedMenuKeys = menuConfig[normalizedRole] || menuConfig["STUDENT"]
-    console.log(normalizedRole, allowedMenuKeys)
+    // console.log(normalizedRole, allowedMenuKeys)
     const filteredMenuItems = menuItems.filter((item) => allowedMenuKeys.includes(item.key));
 
     return {

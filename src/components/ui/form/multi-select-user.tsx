@@ -68,7 +68,7 @@ export function MultiSelectUser({ value, onChange, filters, placeholder = "Adaug
 
   const memoizedFilters = useMemo(() => filters, [filters]);
 
-  console.log("[LOG] RENDER MULTI USER")
+  // // console.log("[LOG] RENDER MULTI USER")
 
   return (
     <SearchableDropdown

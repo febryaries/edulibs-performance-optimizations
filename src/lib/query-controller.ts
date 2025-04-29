@@ -307,7 +307,7 @@ export class QueryController<
 
   async getPaginatedData(params: PaginationParams): Promise<PaginatedResult<WithRelations<T, Map>>> {
 
-    console.log(`[LOG] getPaginatedData ${this.tableName} ${JSON.stringify(params)}`)
+    // // console.log(`[LOG] getPaginatedData ${this.tableName} ${JSON.stringify(params)}`)
 
     const { pageSize, cursor, filters, sorts, searchTerm, searchColumns } = params;
     const sortColumn = sorts?.[0]?.column || this.primaryKey as string;

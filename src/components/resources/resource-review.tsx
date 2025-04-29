@@ -105,7 +105,7 @@ export function ResourceReview({
 
 
   const onSubmit = (data: ResourceEvaluationInsert) => {
-    console.log("[LOG] onSubmit data:", evaluation);
+    // // console.log("[LOG] onSubmit data:", evaluation);
     if (!evaluation) return;
     
     updateEvaluation.mutateAsync({ id: evaluation.id, record: data }, {

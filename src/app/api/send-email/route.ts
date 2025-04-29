@@ -22,7 +22,7 @@ export async function POST(req: Request) {
       };
     };
 
-    console.log(email_data);
+    // console.log(email_data);
 
     // Generate dynamic values for the email based on the action type
     const action = email_data.email_action_type;
@@ -32,9 +32,9 @@ export async function POST(req: Request) {
     let finalUrl;
 
 
-    console.log(email_data);
+    // console.log(email_data);
 
-    const domain = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
+    const domain = process.env.NEXT_PUBLIC_SITE_URL || process.env.VERCEL_URL || 'http://localhost:3000'
 
     switch (action) {
       case 'signup':

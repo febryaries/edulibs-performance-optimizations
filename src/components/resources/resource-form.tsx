@@ -107,7 +107,7 @@ export function ResourceForm({
   // Effect to manually reset form with resource values when in edit mode
   useEffect(() => {
     if (isEditModeLocal && resource) {
-      console.log("[LOG] Manually resetting form with resource values:", resource);
+      // // console.log("[LOG] Manually resetting form with resource values:", resource);
 
       // Create a complete form data object from the resource
       const formData = {
@@ -127,7 +127,7 @@ export function ResourceForm({
       };
 
       // Log the form data we're setting
-      console.log("[LOG] Setting form values to:", formData);
+      // // console.log("[LOG] Setting form values to:", formData);
 
       // Reset the form with these values
       form.reset(formData);
@@ -139,7 +139,7 @@ export function ResourceForm({
       });
 
       // Log the form values after reset
-      console.log("[LOG] Form values after reset:", form.getValues());
+      // // console.log("[LOG] Form values after reset:", form.getValues());
     }
   }, [isEditModeLocal, resource, form]);
 
@@ -148,39 +148,22 @@ export function ResourceForm({
     if (isEditModeLocal && resource) {
       // Force update these fields which seem to have issues
       if (resource.durata) {
-        console.log("[LOG] Explicitly setting durata field to:", resource.durata);
+        // // console.log("[LOG] Explicitly setting durata field to:", resource.durata);
         form.setValue('durata', resource.durata);
       }
 
       if (resource.comentarii) {
-        console.log("[LOG] Explicitly setting comentarii field to:", resource.comentarii);
+        // // console.log("[LOG] Explicitly setting comentarii field to:", resource.comentarii);
         form.setValue('comentarii', resource.comentarii);
       }
 
       if (resource.aggregate) {
-        console.log("[LOG] Explicitly setting aggregate field to:", resource.aggregate);
+        // // console.log("[LOG] Explicitly setting aggregate field to:", resource.aggregate);
         form.setValue('aggregate', resource.aggregate);
       }
 
       // Force a form validation to update the UI
       form.trigger();
-    }
-  }, [isEditModeLocal, resource, form]);
-
-  // Debug log for resource data
-  useEffect(() => {
-    if (isEditModeLocal && resource) {
-      console.log("[LOG] Resource data for form:", {
-        title: resource.title,
-        discipline_id: resource.discipline_id,
-        class_id: resource.class_id,
-        specific_competency_id: resource.specific_competency_id,
-        durata: resource.durata,
-        comentarii: resource.comentarii,
-        description: resource.description,
-        aggregate: resource.aggregate,
-      });
-      console.log("[LOG] Form values after initialization:", form.getValues());
     }
   }, [isEditModeLocal, resource, form]);
 

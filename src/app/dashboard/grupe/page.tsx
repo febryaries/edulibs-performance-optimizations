@@ -53,7 +53,7 @@ export default function GrupePage() {
   // Fetch all groups for sidebar
   const groupsFilter: QueryFilter[] = useMemo(() => {
     if (profile && user) {
-      console.log("[LOG] getPaginatedData groups user role", profile.role)
+      // // // console.log("[LOG] getPaginatedData groups user role", profile.role)
       if (profile.role === 'ADMINISTRATOR') {
         return []
       }

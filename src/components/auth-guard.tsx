@@ -8,6 +8,8 @@ import useMenu from "@/hooks/use-menu"
 // Define protected routes using RegExp
 const protectedRoutes: RegExp[] = [
   /^\/dashboard(\/.*)?$/,        // /dashboard and everything under it
+  /^\/terms$/,                 // exactly /terms
+  /^\/privacy$/,               // exactly /privacy
   /^\/update-password$/,         // exactly /update-password
   /^\/complete-profile$/,        // exactly /complete-profile
 ]
@@ -35,23 +37,23 @@ export function AuthRedirectGuard() {
 
     if (!session && currentlyProtected) {
       // Not logged in and trying to access protected route
-      console.log('[LOG] Redirecting to sign-in')
+      // // // console.log('[LOG] Redirecting to sign-in')
       return router.replace(signInPath)
     }
 
     if (session && !currentlyProtected) {
       // Logged in and on a non-protected route (e.g., /sign-in), redirect to dashboard
-      console.log("[LOG] Redirecting to dashboard")
+      // // // console.log("[LOG] Redirecting to dashboard")
       return router.replace(defaultAuthenticatedPath)
     }
 
     // TODO: This needs to be refactored. 
     // if (session && !menuItems.map(item => item.href).includes(pathname)) {
     //   // Logged in and on a non-allowed route, redirect to dashboard
-    //   console.log("[LOG] filteredMenuItems Redirecting to dashboard", pathname)
+    //   // // console.log("[LOG] filteredMenuItems Redirecting to dashboard", pathname)
     //   return router.replace(defaultAuthenticatedPath)
     // }
-    
+
   }, [session, isLoading, pathname, router])
 
   return null

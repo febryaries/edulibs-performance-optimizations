@@ -114,7 +114,7 @@ export function SearchableDropdown<
     for (const filter of filters ?? []) {
       _filters[filter.column] = filter.value
     }
-    console.log(_filters)
+    // console.log(_filters)
     handleFiltersChanged(_filters)
   }, [filters])
 
@@ -231,7 +231,7 @@ export function SearchableDropdown<
   }, [open, onOpenChange])
 
   const renderResults = useCallback(() => {
-    console.log(`[LOG] RESULTS ${JSON.stringify(results)}`)
+    // // console.log(`[LOG] RESULTS ${JSON.stringify(results)}`)
 
     return results.map((item, index) => {
       const isSelected = isItemSelected(item)

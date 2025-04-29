@@ -174,13 +174,13 @@ export function FilterButton<T>({
         
         // Only update pagination params if we have a valid cursor
         if (cursor) {
-          console.log('[LOG] Scroll loading more with cursor:', cursor)
+          // // console.log('[LOG] Scroll loading more with cursor:', cursor)
           setPaginationParams(prev => ({
             ...prev,
             cursor
           }))
         } else {
-          console.log('[LOG] Scroll: No cursor available for page', nextPage)
+          // // console.log('[LOG] Scroll: No cursor available for page', nextPage)
         }
       }
     } catch (error) {
@@ -372,13 +372,13 @@ export function FilterButton<T>({
                   
                   // Only update pagination params if we have a valid cursor
                   if (cursor) {
-                    console.log('[LOG] Loading more with cursor:', cursor)
+                    // // console.log('[LOG] Loading more with cursor:', cursor)
                     setPaginationParams(prev => ({
                       ...prev,
                       cursor
                     }))
                   } else {
-                    console.log('[LOG] No cursor available for page', nextPage)
+                    // // console.log('[LOG] No cursor available for page', nextPage)
                   }
                 }}
               >

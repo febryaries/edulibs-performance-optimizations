@@ -247,7 +247,7 @@ export function DataTable<TData, TValue, C extends TableNames, M extends Foreign
     updatedVisibility[columnId] = currentVisibility === false ? true : false
 
     // Log for debugging
-    console.log(`[LOG] Toggling column ${columnId} from ${currentVisibility} to ${updatedVisibility[columnId]}`)
+    // // console.log(`[LOG] Toggling column ${columnId} from ${currentVisibility} to ${updatedVisibility[columnId]}`)
 
     // Update local state
     setColumnVisibility(updatedVisibility)

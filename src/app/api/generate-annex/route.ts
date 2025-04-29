@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
     }, {});
     
     // Log the parameters being used (for debugging)
-    console.log(`Generating ${templateName} with parameters:`, data);
+    // console.log(`Generating ${templateName} with parameters:`, data);
     
     // Read the template file
     const templateBuffer = fs.readFileSync(templatePath);
@@ -121,7 +121,7 @@ export async function GET(req: NextRequest) {
     }, {});
     
     // Log the parameters being used (for debugging)
-    console.log(`Generating ${templateName} with parameters:`, data);
+    // console.log(`Generating ${templateName} with parameters:`, data);
     
     // Read the template file
     const templateBuffer = fs.readFileSync(templatePath);

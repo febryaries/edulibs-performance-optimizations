@@ -28,7 +28,7 @@ export const adminSignUpAction = async (formData: FormData) => {
         );
     }
 
-    console.log("Creating admin user...")
+    // console.log("Creating admin user...")
     const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -62,7 +62,7 @@ export const adminSignUpAction = async (formData: FormData) => {
         );
     }
 
-    console.log("Admin user created successfully.")
+    // console.log("Admin user created successfully.")
 
     return encodedRedirect(
         "success",

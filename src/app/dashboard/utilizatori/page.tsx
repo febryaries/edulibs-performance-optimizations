@@ -76,11 +76,11 @@ export default function UtilizatoriPage() {
           console.error('Missing email or role for user:', user);
           continue;
         }
-        
+
         // Invite each user using the auth context function
         await inviteUser(user.email, user.role);
       }
-      
+
       toast.success("Utilizatori invitați cu succes");
       setIsBulkAddUsersDialogOpen(false);
     } catch (error) {
@@ -301,7 +301,7 @@ export default function UtilizatoriPage() {
           <Button
             className="flex items-center gap-1"
             variant="outline"
-            onClick={() => {console.log('aici'); setIsBulkAddUsersDialogOpen(true)}}
+            onClick={() => { setIsBulkAddUsersDialogOpen(true) }}
           >
             <Upload className="h-4 w-4" />
             Adaugă în masă

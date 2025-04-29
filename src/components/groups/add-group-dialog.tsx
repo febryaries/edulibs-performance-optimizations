@@ -65,10 +65,6 @@ export function AddGroupDialog({ open, onOpenChange }: AddGroupDialogProps) {
         },
     })
 
-    useEffect(() => {
-        console.log("[LOG] USERS", form.watch('users'))
-    },[form.watch('users')])
-
     const onSubmit = (values: GroupFormValues) => {
         if (!user) return
 

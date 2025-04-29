@@ -68,7 +68,7 @@ export default function CompleteProfilePage() {
 
     try {
       // Debug log
-      console.log("Submitting profile with:", data);
+      // console.log("Submitting profile with:", data);
 
       const success = await completeProfile({
         first_name: data.firstName,

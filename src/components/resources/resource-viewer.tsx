@@ -114,7 +114,7 @@ export function ResourceViewer({ resource: resourceProp, onClose, onToggleFullSc
       },
       {
         onSuccess: (data) => {
-          console.log(`[LOG] NEW EVALUATION :: ${data?.id}`);
+          // // console.log(`[LOG] NEW EVALUATION :: ${data?.id}`);
           const newEvalId = data?.id;
           if (newEvalId) {
             if (openReviewSheet) {
@@ -191,7 +191,7 @@ export function ResourceViewer({ resource: resourceProp, onClose, onToggleFullSc
 
   // Handle open review
   function handleOpenReview(row: any) {
-    console.log("[LOG] handleOpenReview ::", openReviewSheet)
+    // // console.log("[LOG] handleOpenReview ::", openReviewSheet)
     if (openReviewSheet) {
       openReviewSheet(resource, row.id);
     }

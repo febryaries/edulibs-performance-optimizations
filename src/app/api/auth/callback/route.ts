@@ -24,11 +24,11 @@ export async function GET(request: Request) {
     const token_hash = requestUrl.searchParams.get('token_hash')
     const type = requestUrl.searchParams.get('type') as EmailOtpType | null
     const redirectTo = requestUrl.searchParams.get("redirect_to")?.toString();
-    console.log("Callback route called");
-    console.log(origin)
+    // console.log("Callback route called");
+    // console.log(origin)
 
     if (token_hash && type) {
-      console.log("Exchanging code for session");
+      // console.log("Exchanging code for session");
 
       const { data, error } = await supabase.auth.verifyOtp({
         type,

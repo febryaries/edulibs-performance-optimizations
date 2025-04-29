@@ -248,7 +248,7 @@ export function useDataTable<T, C extends TableNames, M extends ForeignKeyRelati
                 cursor: undefined,
             }));
         }
-        console.log(`[LOG] TRIGGERING ${JSON.stringify(memoizedInitialState)}`)
+        // // console.log(`[LOG] TRIGGERING ${JSON.stringify(memoizedInitialState)}`)
         
         // Update ref to current value
         prevInitialStateRef.current = currentInitialStateString;
