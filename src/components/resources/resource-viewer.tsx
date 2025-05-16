@@ -10,7 +10,7 @@ import { DataTable } from "@/components/ui/data-table/data-table"
 import { type ColumnDef } from "@tanstack/react-table"
 import { isAdmin, isEvaluator, isModerator, isOwner, useAuth } from "@/lib/auth-context"
 import { toast } from "@/components/ui/use-toast";
-import { ResourceEvaluation, useResourceEvaluationsController, useResourceEvaluationsCrud, useResourcesCrud } from "@/hooks/use-controllers"
+import { ResourceEvaluation, useResourceCompetenciesCrud, useResourceEvaluationsController, useResourceEvaluationsCrud, useResourcesCrud, useResourceSpecificCompetenciesCrud } from "@/hooks/use-controllers"
 import { PaginationParams, UsePaginatedHook } from "@/lib/query-controller"
 import { useCallback, useMemo, useState } from "react"
 import { useAnexa3, useAnexa6 } from "@/hooks/use-anexe"
@@ -28,6 +28,7 @@ export function ResourceViewer({ resource: resourceProp, onClose, onToggleFullSc
 
   const { useById: useResourceById, useUpdate: updateResource } = useResourcesCrud();
   const { useCreate: createEvaluation, useList: useResourceEvaluations } = useResourceEvaluationsCrud();
+  const { useAll: useResourceCompetencies } = useResourceSpecificCompetenciesCrud();
 
   const defaultEvaluationsFilters = useCallback((params?: PaginationParams): PaginationParams => {
     return {
@@ -69,6 +70,9 @@ export function ResourceViewer({ resource: resourceProp, onClose, onToggleFullSc
   }, [evaluationsData]);
 
   const { data: resource } = useResourceById(resourceProp.id);
+  const { data: resourceCompetencies } = useResourceCompetencies({
+    filters: [{ column: 'resource_id', operator: 'eq', value: resourceProp.id }]
+  });
   const { user } = useAuth();
 
   // Use the anexa hooks
@@ -78,6 +82,25 @@ export function ResourceViewer({ resource: resourceProp, onClose, onToggleFullSc
   // Permissions
   const canEdit = (isOwner(user, resource) && ["DRAFT", "UNCONFORMABLE"].includes(String(resource?.status))) || isAdmin(user);
   const canEditAsEvaluator = isModerator(user) && String(resource?.status) === "IN_REVIEW";
+  // const isEvaluator = (user?.user_metadata.role === "EVALUATOR" && user?.id === resource?.evaluator_id) || user?.user_metadata.role === "ADMINISTRATOR";
+
+  // Helper function to get competency text from resource
+  const getCompetencyText = (): string => {
+
+    // First check if we have competencies from the link table
+    if (Array.isArray(resourceCompetencies) && resourceCompetencies.length > 0) {
+      return resourceCompetencies
+        .map((item: any) => item.competency?.name || "N/A")
+        .join(", ");
+    }
+
+    return '';
+    
+    // Fall back to legacy single competency if available
+    // return (resource?.specific_competency?.name || "") + 
+    //   (resource?.specific_competency?.id === -1 && resource?.specific_competence_text ? " " + resource.specific_competence_text : "");
+  };
+
   const canSendToReview = (isOwner(user, resource) && ["DRAFT", "UNCONFORMABLE"].includes(String(resource?.status))) || (isAdmin(user) && ["DRAFT", "UNCONFORMABLE"].includes(String(resource?.status)));
   const canEvaluate = (isEvaluator(user) && resource?.status === "IN_REVIEW") || isAdmin(user);
 
@@ -132,12 +155,14 @@ export function ResourceViewer({ resource: resourceProp, onClose, onToggleFullSc
 
   // Handle document generation and download
   const handleGenerateDocument = async () => {
+
+    console.log("[LOG] resource:", resource);
     // Map resource data to gen3Schema format
     const documentData = {
       serial_number: resource?.serial_number || 0,
       title: resource?.title || "",
       discipline: resource?.discipline?.name || "",
-      competency: resource?.specific_competency?.name || "",
+      competency: getCompetencyText(),
       class: resource?.class?.name || "",
       author: `${resource?.author?.first_name || ""} ${resource?.author?.last_name || ""}`,
       duration: resource?.durata || "1 oră",
@@ -170,7 +195,7 @@ export function ResourceViewer({ resource: resourceProp, onClose, onToggleFullSc
       discipline: resource?.discipline?.name || "",
       curricular_area: "", // This field doesn't exist on resource, using empty string
       domain: "", // This field doesn't exist on resource, using empty string
-      specific_competency: resource?.specific_competency?.name || "",
+      specific_competency: getCompetencyText(),
       concordance_comment_yes: typeof latestEvaluation?.concordance_ok === 'boolean' && latestEvaluation.concordance_ok ? (latestEvaluation.concordance_comment || "") : "",
       concordance_comment_no: typeof latestEvaluation?.concordance_ok === 'boolean' && !latestEvaluation.concordance_ok ? (latestEvaluation.concordance_comment || "") : "",
       relevance_comment_yes: typeof latestEvaluation?.relevance_ok === 'boolean' && latestEvaluation.relevance_ok ? (latestEvaluation.relevance_comment || "") : "",
@@ -449,22 +474,26 @@ export function ResourceViewer({ resource: resourceProp, onClose, onToggleFullSc
               <h2 className="text-xl font-semibold text-gray-900">Prezentarea resursei educaționale</h2>
 
               <div>
-                <div className="text-sm font-medium text-gray-500 mb-1">Competența specifică</div>
-                <div className="mb-4">{resource?.specific_competency?.name || "N/A"}</div>
-
-                {/* {resource?.status === "CONFORMABLE" && (
-                  <div className="bg-gray-50 p-4 rounded-md mb-4">
-                    <div className="flex items-start mb-2">
-                      <div className="flex items-center justify-center w-6 h-6 rounded-full bg-gray-200 text-gray-600 text-xs mr-2 mt-0.5">
-                        i
-                      </div>
-                      <div>
-                        <div className="font-medium text-sm">Comentariu evaluator</div>
-                        <div className="text-sm text-gray-600">{resource?.evaluator_comment || "Fără comentarii"}</div>
-                      </div>
+                <div className="text-sm font-medium text-gray-500 mb-1">Competențe specifice</div>
+                <div className="mb-4">
+                  {/* Display competencies using the helper function */}
+                  {resourceCompetencies?.length == 0 && (
+                    <div className="mb-2">
+                      N/A
                     </div>
-                  </div>
-                )} */}
+                  )}
+                  
+                  {/* Display competencies from the link table in detail */}
+                  {Array.isArray(resourceCompetencies) && resourceCompetencies.length > 0 && (
+                    <div className="space-y-2 mt-2">
+                      {resourceCompetencies.map((item: any) => (
+                        <div key={item.id} className="bg-gray-50 p-2 rounded-md">
+                          {item.competency?.name || "N/A"}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
 
                 <div className="text-sm font-medium text-gray-500 mb-1">Descriere</div>
                 <div className="mb-4 whitespace-pre-wrap">{resource?.description || "Fără descriere"}</div>

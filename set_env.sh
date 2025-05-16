@@ -8,6 +8,6 @@ cat .env.production | while read line; do
     echo "$key=$value"
     # echo [value] | vercel env add [key] [production]
     # echo "vercel env add $key production < <$(echo $value)"
-    vercel env add $key preview < <(echo $value)
+    vercel env add $key production < <(echo $value)
   fi
 done

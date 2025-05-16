@@ -1,15 +1,17 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useMemo, useReducer, useEffect } from "react"
 import type {
+  ForeignKeyRelationMap,
+  GetPaginatedDataFn,
   PaginatedResult,
   PaginationParams,
   QueryFilter,
-  QueryCursor,
+  TableNames,
   UsePaginatedHook,
+  WithRelations
 } from "@/lib/query-controller"
-import type { UseQueryResult } from "@tanstack/react-query"
-import { useDebounce } from "./use-debounce"
+import { useInfiniteQuery, UseInfiniteQueryResult, useQueryClient } from "@tanstack/react-query"
 
 export interface UseInfiniteDataTable<T> {
   pageSize: number
@@ -19,223 +21,255 @@ export interface UseInfiniteDataTable<T> {
   searchTerm: string
   filters: Record<string, any>
   sorting: { id: string; desc: boolean }[]
-  query: UseQueryResult<PaginatedResult<T>, Error>
-  results: T[] // NEW: accumulated list
-
+  query: UseInfiniteQueryResult<PaginatedResult<T>, Error>
+  results: T[]
+  
   setPageSize: (size: number) => void
   setSearchTerm: (term: string) => void
   handleFiltersChanged: (filters: Record<string, any>) => void
   handleFilterChange: (id: string, value: any) => void
   handleSortChange: (sorting: { id: string; desc: boolean }[]) => void
-
+  
   goToNextPage: () => void
   goToPreviousPage: () => void
   resetFilters: () => void
 }
 
+export interface DataTableState<T> {
+  queryParams: PaginationParams
+  pageIndex: number
+  filters: Record<string, any>
+  sorting: { id: string; desc: boolean }[]
+  searchTerm: string
+  resultsMap: Map<number, T[]>
+  filterChangeCounter: number // Track filter changes to reset query
+}
+
+// 🛡️ Utility to avoid "undefined" column issues
+function toValidQueryFilters(filters: Record<string, any>): QueryFilter[] {
+  return Object.entries(filters)
+    .filter(([key]) => key && key !== "undefined")
+    .map(([key, value]) => ({
+      column: key,
+      operator: "eq" as const, // 👈 force literal
+      value
+    }))
+}
+
 export function useInfiniteDataTable<T>(
-  fetchHook: UsePaginatedHook<T>,
+  fetchHook: (params: PaginationParams) => Promise<PaginatedResult<T>>,
   initialState: PaginationParams,
+  key: string
 ): UseInfiniteDataTable<T> {
-  const [queryParams, setQueryParams] = useState<PaginationParams>(initialState)
-  const [pageIndex, setPageIndex] = useState(0)
-  const [searchTerm, setSearchTerm] = useState(initialState?.searchTerm ?? "")
-  const [resultsMap, setResultsMap] = useState<Map<string, T>>(new Map())
-
-  // Merge UI filters and initialState.filters (from props)
-  const [filters, setFilters] = useState<Record<string, any>>(initialState?.filters ?? {})
-  const [sorting, setSorting] = useState<{ id: string; desc: boolean }[]>([])
-
-  /** Map <pageIndex, cursor|null> for O(1) cursor look‑ups. */
-  const [pageCursorMap, setPageCursorMap] = useState<Map<number, QueryCursor | null>>(new Map([[0, null]]))
-
-  // Track previous filter and search state to detect changes
-  const prevFiltersRef = useRef<string>("")
-  const prevSearchTermRef = useRef<string>("")
-
-  const setPageSize: (size: number) => void = (size: number) => setQueryParams((prev) => ({ ...prev, pageSize: size }))
-
-  const handleFilterChange = useCallback((id: string, value: any) => {
-    setFilters((prev) => ({ ...prev, [id]: value }))
-  }, [])
-
-  const handleFiltersChanged = useCallback((filters: Record<string, any>) => {
-    setFilters(filters)
-  }, [])
-
-  const handleSortChange = useCallback((sorting: { id: string; desc: boolean }[]) => {
-    setSorting(sorting)
-  }, [])
-
-  const apiFilters = (): QueryFilter[] => {
-    // If filters is already an array (from props), return as-is
-    if (Array.isArray(filters)) {
-      return filters
+  // Setup state with reducer pattern to match original implementation
+  const [state, setState] = useReducer(
+    (prev: DataTableState<T>, next: Partial<DataTableState<T>>) => ({
+      ...prev,
+      ...next
+    }),
+    {
+      queryParams: initialState,
+      pageIndex: 0,
+      filters: {},
+      sorting: initialState.sorts?.map(s => ({ id: s.column, desc: s.direction === "desc" })) || [],
+      searchTerm: initialState.searchTerm || "",
+      resultsMap: new Map(),
+      filterChangeCounter: 0
     }
-    // Otherwise, treat filters as an object (UI filters)
-    const result: QueryFilter[] = []
-    for (const [key, value] of Object.entries(filters)) {
-      if (!value || (Array.isArray(value) && value.length === 0)) continue
-      if (Array.isArray(value)) {
-        result.push({
-          column: key,
-          operator: "in",
-          value: value.map((v) => v?.value ?? v),
-        })
-      } else if (typeof value === "object" && value !== null && "from" in value && "to" in value) {
-        const { from, to } = value as { from?: Date; to?: Date }
-        if (from) {
-          const tmp = new Date(from)
-          tmp.setHours(0, 0, 0, 0)
-          result.push({ column: key, operator: "gte", value: tmp.toISOString().split("T")[0] })
-        }
-        if (to) {
-          const tmp = new Date(to)
-          tmp.setHours(23, 59, 59, 999)
-          result.push({ column: key, operator: "lte", value: tmp.toISOString().split("T")[0] })
-        }
-      } else {
-        result.push({ column: key, operator: "eq", value: (value as any)?.value ?? value })
+  )
+
+  // Compute the effective params for the current state
+  const computeQueryParams = useCallback((cursor?: PaginationParams['cursor']): PaginationParams => {
+    return {
+      ...state.queryParams,
+      pageSize: state.queryParams.pageSize,
+      filters: toValidQueryFilters(state.filters),
+      sorts: state.sorting.map(({ id, desc }) => ({
+        column: id,
+        direction: desc ? "desc" : "asc"
+      })),
+      searchTerm: state.searchTerm,
+      cursor // Use cursor when provided
+    }
+  }, [state.queryParams, state.filters, state.sorting, state.searchTerm])
+
+  // Create a queryKey that includes the filterChangeCounter
+  const queryKey = useMemo(() => 
+    [key, state.queryParams.pageSize, state.searchTerm, state.filters, state.sorting, state.filterChangeCounter], 
+    [key, state.queryParams.pageSize, state.searchTerm, state.filters, state.sorting, state.filterChangeCounter]
+  )
+
+  // Set up the infinite query
+  const query = useInfiniteQuery({
+    queryKey,
+    queryFn: async ({ pageParam }) => {
+      const params = computeQueryParams(pageParam)
+      return await fetchHook(params)
+    },
+    getNextPageParam: (lastPage) => {
+      // Return the nextCursor directly from the last page result
+      return lastPage?.nextCursor || undefined
+    },
+    initialPageParam: undefined as any // Start with no cursor
+  })
+
+  // Accumulate results from all pages up to the current page index
+  const results = useMemo(() => {
+    if (!query.data?.pages) return []
+    
+    // Update the results map to cache page results
+    const updatedMap = new Map(state.resultsMap)
+    query.data.pages.forEach((page, index) => {
+      updatedMap.set(index, page.data)
+    })
+    
+    // We need to spread to avoid React's object reference equality check
+    if (updatedMap.size !== state.resultsMap.size) {
+      setState({ resultsMap: updatedMap })
+    }
+    
+    // Accumulate all results from pages 0 up to and including the current page
+    let accumulatedResults: T[] = []
+    
+    // Get all pages up to the current page index
+    const pagesToInclude = Math.min(state.pageIndex + 1, query.data.pages.length)
+    
+    for (let i = 0; i < pagesToInclude; i++) {
+      if (query.data.pages[i]?.data) {
+        accumulatedResults = [...accumulatedResults, ...query.data.pages[i].data]
       }
     }
-    return result
+    
+    return accumulatedResults
+  }, [query.data, state.pageIndex, state.resultsMap])
+
+  // Calculate total pages based on the count from the first page
+  const totalPages = useMemo(() => {
+    if (!query.data?.pages[0]?.count) return 0
+    return Math.ceil(query.data.pages[0].count / state.queryParams.pageSize)
+  }, [query.data?.pages, state.queryParams.pageSize])
+
+  // Reset function to invalidate query when filters change
+  const resetQueryData = useCallback(() => {
+    // Increment the counter to force a new query
+    setState({ 
+      filterChangeCounter: state.filterChangeCounter + 1,
+      pageIndex: 0
+    })
+  }, [state.filterChangeCounter])
+
+  // Handler for changing page size
+  const setPageSize = (size: number) => {
+    setState({ 
+      queryParams: { ...state.queryParams, pageSize: size } 
+    })
+    resetQueryData()
   }
 
-  const goToNextPage = () => {
-    const next = pageIndex + 1
+  // Handler for setting search term
+  const setSearchTerm = (term: string) => {
+    setState({
+      searchTerm: term,
+      queryParams: { ...state.queryParams, searchTerm: term }
+    })
+    resetQueryData()
+  }
 
-    if (pageCursorMap.has(next)) {
-      const nextCursor = pageCursorMap.get(next)!
-      setQueryParams((prev) => ({ ...prev, cursor: nextCursor ?? undefined }))
-      setPageIndex(next)
-    } else if (query.data?.nextCursor) {
-      const cursor = query.data.nextCursor
-      setPageCursorMap((prev) => {
-        const updated = new Map(prev)
-        updated.set(next, cursor)
-        return updated
-      })
-      setQueryParams((prev) => ({ ...prev, cursor }))
-      setPageIndex(next)
+  // Handler for changing a single filter
+  const handleFilterChange = (id: string, value: any) => {
+    const filters = { ...state.filters, [id]: value }
+    setState({
+      filters,
+      queryParams: {
+        ...state.queryParams,
+        filters: toValidQueryFilters(filters)
+      }
+    })
+    resetQueryData()
+  }
+
+  // Handler for changing multiple filters at once
+  const handleFiltersChanged = (filters: Record<string, any>) => {
+    setState({
+      filters,
+      queryParams: {
+        ...state.queryParams,
+        filters: toValidQueryFilters(filters)
+      }
+    })
+    resetQueryData()
+  }
+
+  // Handler for changing sorting
+  const handleSortChange = (sorting: { id: string; desc: boolean }[]) => {
+    setState({
+      sorting,
+      queryParams: {
+        ...state.queryParams,
+        sorts: sorting.map(({ id, desc }) => ({
+          column: id,
+          direction: desc ? "desc" : "asc"
+        }))
+      }
+    })
+    resetQueryData()
+  }
+
+  // Navigation methods
+  const goToNextPage = () => {
+    // Trigger fetching the next page if needed
+    if (query.hasNextPage && !query.isFetchingNextPage) {
+      query.fetchNextPage()
     }
+    
+    setState({
+      pageIndex: state.pageIndex + 1
+    })
   }
 
   const goToPreviousPage = () => {
-    const previous = pageIndex - 1
-    if (previous < 0) return
-
-    if (pageCursorMap.has(previous)) {
-      const prevCursor = pageCursorMap.get(previous)!
-      setQueryParams((prev) => ({ ...prev, cursor: prevCursor ?? undefined }))
-      setPageIndex(previous)
-    } else if (query.data?.prevCursor) {
-      const cursor = query.data.prevCursor
-      setPageCursorMap((prev) => {
-        const updated = new Map(prev)
-        updated.set(previous, cursor)
-        return updated
+    if (state.pageIndex > 0) {
+      setState({
+        pageIndex: state.pageIndex - 1
       })
-      setQueryParams((prev) => ({ ...prev, cursor }))
-      setPageIndex(previous)
     }
   }
 
+  // Handler for resetting filters
   const resetFilters = () => {
-    setFilters({})
-    setPageIndex(0)
-    setPageCursorMap(new Map([[0, null]]))
-    setResultsMap(new Map())
-    setQueryParams((prev) => ({
-      ...prev,
-      filters: [],
-      cursor: undefined,
-    }))
-  }
-
-  const memoizedInitialFilters: QueryFilter[] = useMemo(() => {
-    return initialState?.filters ?? []
-  }, [initialState?.filters])
-
-  // Constructed Query Params
-  const constructedQueryParams: PaginationParams = useMemo(() => {
-    return {
-      ...queryParams,
-      sorts: sorting.map((s) => ({ column: s.id, direction: s.desc ? "desc" : "asc" })),
-      filters: apiFilters(),
-      searchTerm,
-    }
-  }, [queryParams, filters, sorting, searchTerm, memoizedInitialFilters])
-
-  const debouncedQueryParams = useDebounce(constructedQueryParams, 300)
-  const query = fetchHook(debouncedQueryParams)
-  const totalPages = query.data?.count ?? 0
-
-  // Check if filters or search have changed
-  const currentFiltersString = JSON.stringify(apiFilters())
-  const filtersChanged = prevFiltersRef.current !== currentFiltersString
-  const searchChanged = prevSearchTermRef.current !== searchTerm
-
-  // Update data when query results come in
-  useEffect(() => {
-    if (!query.data?.data) return
-
-    // If we're at page 0 and filters/search changed, replace the map
-    // Otherwise, add to the existing map
-    if (pageIndex === 0 && (filtersChanged || searchChanged)) {
-      const newMap = new Map()
-      for (const item of query.data.data) {
-        newMap.set((item as any).id, item)
+    setState({
+      filters: {},
+      sorting: [],
+      searchTerm: "",
+      resultsMap: new Map(),
+      queryParams: {
+        ...initialState,
+        filters: [],
+        sorts: [],
+        searchTerm: ""
       }
-      setResultsMap(newMap)
-
-      // Update refs to current values
-      prevFiltersRef.current = currentFiltersString
-      prevSearchTermRef.current = searchTerm
-    } else {
-      // Accumulate results when paginating with same filters
-      setResultsMap((prev) => {
-        const updated = new Map(prev)
-        for (const item of query.data.data) {
-          updated.set((item as any).id, item)
-        }
-        return updated
-      })
-    }
-  }, [query.data, pageIndex, currentFiltersString, searchTerm])
-
-  // Reset pagination when filters or search change
-  useEffect(() => {
-    if (filtersChanged || searchChanged) {
-      setPageIndex(0)
-      setPageCursorMap(new Map([[0, null]]))
-      setQueryParams((prev) => ({
-        ...prev,
-        cursor: undefined,
-      }))
-      // Don't clear resultsMap here - we'll handle that in the query.data effect
-    }
-  }, [currentFiltersString, searchTerm])
+    })
+    resetQueryData()
+  }
 
   return {
-    /* State */
-    pageSize: queryParams.pageSize,
-    pageIndex,
+    pageSize: state.queryParams.pageSize,
+    pageIndex: state.pageIndex,
     totalPages,
-    searchTerm,
-    state: queryParams,
-    filters,
-    sorting,
+    state: computeQueryParams(),
+    searchTerm: state.searchTerm,
+    filters: state.filters,
+    sorting: state.sorting,
     query,
-    results: Array.from(resultsMap.values()),
-    /* Setters */
+    results,
+    
     setPageSize,
     setSearchTerm,
     handleFilterChange,
     handleFiltersChanged,
     handleSortChange,
-    /* Handlers */
     goToNextPage,
     goToPreviousPage,
-    resetFilters,
+    resetFilters
   }
 }

@@ -34,27 +34,31 @@ import { DateRangeFilter } from "./filter-date-range"
 import type { DateRange } from "react-day-picker"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useDataTable } from "@/hooks/use-data"
-import type { ForeignKeyRelationMap, TableNames, UsePaginatedHook } from "@/lib/query-controller"
+import type { ForeignKeyRelationMap, PaginatedResult, PaginationParams, TableNames, UsePaginatedHook, WithRelations } from "@/lib/query-controller"
 import type { UseControllerHook } from "@/hooks/use-controllers"
 import { Card, CardContent } from "@/components/ui/card"
 import { useMediaQuery } from "@/hooks/use-media-query"
 
 interface ControllerFilterConfig<T = any> {
-  valueField: keyof T
-  labelField: keyof T
+  valueField: keyof T | string
+  labelField: keyof T | string
   pageSize?: number
+  searchColumns?: string[]
 }
 
-export interface Filter {
+export interface Filter<T extends TableNames = any, M extends ForeignKeyRelationMap<T> = any> {
   id: string
   label: string
   type: "select" | "date" | "controller"
   options?: { value: string; label: string }[]
   controller?: ControllerFilterConfig
-  controllerHook?: UsePaginatedHook<any>
+  fetchHook?: (params: PaginationParams) => Promise<PaginatedResult<WithRelations<T, M>>>
   icon?: React.ReactNode
   queryColumn?: string // Column name in the database
   customFilterHandler?: string
+  valueField?: string
+  labelField?: string
+  searchColumns?: string[]
 }
 
 interface DataTableProps<TData, TValue, C extends TableNames, M extends ForeignKeyRelationMap<C>> {
@@ -71,6 +75,7 @@ interface DataTableProps<TData, TValue, C extends TableNames, M extends ForeignK
   enablePagination?: boolean
   pageSizeOptions?: number[]
   initialPageSize?: number
+  initialSorting?: { id: string; desc: boolean }[] // Initial sorting configuration
   rowCountText?: string
   className?: string
   visibleColumnsConfig?: {
@@ -109,6 +114,7 @@ export function DataTable<TData, TValue, C extends TableNames, M extends Foreign
   enablePagination = true,
   pageSizeOptions = [10, 20, 30, 50],
   initialPageSize = 10,
+  initialSorting = [],
   rowCountText = "resurse",
   className,
   visibleColumnsConfig,
@@ -136,6 +142,7 @@ export function DataTable<TData, TValue, C extends TableNames, M extends Foreign
     setPageSize,
     handleFilterChange: handleTableFilterChange,
     resetFilters: resetTableFilters,
+    isLoading,
   } = useDataTable<TData, C, M>(
     useController,
     useQueryHook,
@@ -145,7 +152,7 @@ export function DataTable<TData, TValue, C extends TableNames, M extends Foreign
       searchTerm: "",
       searchColumns,
     },
-    // searchColumns
+    initialSorting
   )
 
   // Row selection state
@@ -296,7 +303,7 @@ export function DataTable<TData, TValue, C extends TableNames, M extends Foreign
 
   // Render mobile card view
   const renderMobileCards = () => {
-    if (query.isLoading) {
+    if (query.isLoading || query.isFetching) {
       // Create skeleton cards for loading state
       return Array.from({ length: 5 }).map((_, index) => (
         <Card key={`skeleton-${index}`} className="mb-4">
@@ -398,7 +405,7 @@ export function DataTable<TData, TValue, C extends TableNames, M extends Foreign
 
   // Table body rendering
   const renderTableBody = () => {
-    if (query.isLoading) {
+    if (query.isLoading || query.isFetching) {
       // Create skeleton rows for loading state
       return Array.from({ length: 5 }).map((_, index) => (
         <tr key={`skeleton-${index}`} className="border-b border-gray-100">
@@ -591,6 +598,7 @@ export function DataTable<TData, TValue, C extends TableNames, M extends Foreign
                   return (
                     <FilterButton
                       key={key}
+                      filterKey={filter.id}
                       icon={filter.icon || <Circle className="h-4 w-4 text-gray-400" />}
                       label={filter.label}
                       options={(filter.options as FilterOption[]) || []}
@@ -614,13 +622,20 @@ export function DataTable<TData, TValue, C extends TableNames, M extends Foreign
                   return (
                     <FilterButton
                       key={key}
+                      filterKey={filter.id}
                       icon={filter.icon || <Circle className="h-4 w-4 text-gray-400" />}
                       label={filter.label}
-                      options={[]}
                       onChange={(selectedOptions) => handleFilterChange(filter.id, selectedOptions)}
                       defaultSelected={tableFilters[filter.id] || []}
-                      useQueryHook={filter.controllerHook}
-                      controllerConfig={filter.controller}
+                      fetchHook={(params) => {
+                        console.log('Fetching filter options with params:', params);
+                        return filter.fetchHook!(params);
+                      }}
+                      controllerConfig={{
+                        valueField: filter.valueField || "id",
+                        labelField: filter.labelField || "name",
+                        searchColumns: filter.searchColumns || ["name"]
+                      }}
                     />
                   )
 

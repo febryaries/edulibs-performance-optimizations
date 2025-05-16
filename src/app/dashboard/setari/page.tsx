@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { useAuth } from "@/lib/auth-context"
-import { useUsersCrud, useEducationLevelsCrud } from "@/hooks/use-controllers"
+import { useUsersCrud, useEducationLevelsCrud, useEducationLevelsController } from "@/hooks/use-controllers"
 import { useToast } from "@/components/ui/use-toast"
 import { createClient } from "@/utils/supabase/client"
 import { SearchableDropdown } from "@/components/ui/searchable-dropdown"
@@ -20,7 +20,7 @@ export default function SettingsPage() {
   const { useById, useUpdate } = useUsersCrud()
   // Get user data from the database
   const { data: userData } = useById(user?.id || '')
-  const { useList: useEducationalLevels } = useEducationLevelsCrud()
+  const educationalLevelsController = useEducationLevelsController();
   
   const [activeSection, setActiveSection] = useState<string>("date-personale")
   const [formData, setFormData] = useState<{
@@ -262,7 +262,8 @@ export default function SettingsPage() {
                         Nivel de educație
                       </label>
                       <SearchableDropdown
-                        useQueryHook={useEducationalLevels}
+                        fetchHook={(params) => educationalLevelsController.getPaginatedData(params)}
+                        filterKey="education-level-dropdown"
                         value={formData.educationLevelId}
                         onChange={(value) => {
                           // Handle the value correctly based on its type

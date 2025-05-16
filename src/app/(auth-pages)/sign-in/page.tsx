@@ -62,10 +62,12 @@ export default function LoginPage() {
 
   const handleGoogleLogin = async () => {
     setIsSubmitting(true)
-    const domain = process.env.NEXT_PUBLIC_SITE_URL || process.env.VERCEL_URL || 'http://localhost:3000'
+    const domain = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
+    console.log("REDIRECTING TO DOMAIN :: ", domain);
     await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
+        
         redirectTo: `${domain}/api/auth/callback`
       }
     })

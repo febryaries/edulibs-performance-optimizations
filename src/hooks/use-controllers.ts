@@ -11,7 +11,7 @@ export type UseControllerHook<T extends TableNames, Map extends ForeignKeyRelati
 
 // Class
 export const classRelationMap = {
-  'classes_level_id_fkey': { alias: 'educational_level', referencedTable: 'educational_levels' }
+  'classes_level_id_fkey': { alias: 'educational_level', referencedTable: 'educational_levels', isOneToMany: false }
 } as const;
 
 export class ClassController extends QueryController<'classes', typeof classRelationMap> {
@@ -42,8 +42,8 @@ export function useClassesCrud() {
 
 // Comment
 export const commentRelationMap = {
-  'comments_resource_id_fkey': { alias: 'resource', referencedTable: 'resources' },
-  'comments_user_id_fkey': { alias: 'user', referencedTable: 'users' }
+  'comments_resource_id_fkey': { alias: 'resource', referencedTable: 'resources', isOneToMany: false },
+  'comments_user_id_fkey': { alias: 'user', referencedTable: 'users', isOneToMany: false }
 } as const;
 
 export class CommentController extends QueryController<'comments', typeof commentRelationMap> {
@@ -101,9 +101,9 @@ export function useCurricularAreasCrud() {
 
 // Discipline Class
 export const disciplineClassRelationMap = {
-  'discipline_class_area_id_fkey': { alias: 'curricular_area', referencedTable: 'curricular_areas' },
-  'discipline_class_class_id_fkey': { alias: 'class', referencedTable: 'classes' },
-  'discipline_class_discipline_id_fkey': { alias: 'discipline', referencedTable: 'disciplines' }
+  'discipline_class_area_id_fkey': { alias: 'curricular_area', referencedTable: 'curricular_areas', isOneToMany: false },
+  'discipline_class_class_id_fkey': { alias: 'class', referencedTable: 'classes', isOneToMany: false },
+  'discipline_class_discipline_id_fkey': { alias: 'discipline', referencedTable: 'disciplines', isOneToMany: false }
 } as const;
 
 export class DisciplineClassController extends QueryController<'discipline_class', typeof disciplineClassRelationMap> {
@@ -132,7 +132,7 @@ export function useDisciplineClassCrud() {
 
 // Discipline
 export const disciplineRelationMap = {
-  'disciplines_domain_id_fkey': { alias: 'domain', referencedTable: 'domains' }
+  'disciplines_domain_id_fkey': { alias: 'domain', referencedTable: 'domains', isOneToMany: false }
 } as const;
 
 export class DisciplineController extends QueryController<'disciplines', typeof disciplineRelationMap> {
@@ -219,8 +219,8 @@ export function useEducationLevelsCrud() {
 
 // General Competency
 export const generalCompetencyRelationMap = {
-  'general_competencies_discipline_id_fkey': { alias: 'discipline', referencedTable: 'disciplines' },
-  'general_competencies_level_id_fkey': { alias: 'educational_level', referencedTable: 'educational_levels' }
+  'general_competencies_discipline_id_fkey': { alias: 'discipline', referencedTable: 'disciplines', isOneToMany: false },
+  'general_competencies_level_id_fkey': { alias: 'educational_level', referencedTable: 'educational_levels', isOneToMany: false }
 } as const;
 
 export class GeneralCompetencyController extends QueryController<'general_competencies', typeof generalCompetencyRelationMap> {
@@ -250,8 +250,8 @@ export function useGeneralCompetenciesCrud() {
 
 // Group Member
 export const groupMemberRelationMap = {
-  'group_members_group_id_fkey': { alias: 'group', referencedTable: 'groups' },
-  'group_members_user_id_fkey': { alias: 'user', referencedTable: 'users' }
+  'group_members_group_id_fkey': { alias: 'group', referencedTable: 'groups', isOneToMany: false },
+  'group_members_user_id_fkey': { alias: 'user', referencedTable: 'users', isOneToMany: false }
 } as const;
 
 export class GroupMemberController extends QueryController<'group_members', typeof groupMemberRelationMap> {
@@ -281,8 +281,8 @@ export function useGroupMembersCrud() {
 
 // Group Resource
 export const groupResourceRelationMap = {
-  'group_resources_group_id_fkey': { alias: 'group', referencedTable: 'groups' },
-  'group_resources_resource_id_fkey': { alias: 'resource', referencedTable: 'resources' }
+  'group_resources_group_id_fkey': { alias: 'group', referencedTable: 'groups', isOneToMany: false },
+  'group_resources_resource_id_fkey': { alias: 'resource', referencedTable: 'resources', isOneToMany: false }
 } as const;
 
 export class GroupResourceController extends QueryController<'group_resources', typeof groupResourceRelationMap> {
@@ -311,7 +311,7 @@ export function useGroupResourcesCrud() {
 
 // Group
 export const groupRelationMap = {
-  'groups_created_by_fkey': { alias: 'created_by', referencedTable: 'users' }
+  'groups_created_by_fkey': { alias: 'created_by', referencedTable: 'users', isOneToMany: false }
 } as const;
 
 export class GroupController extends QueryController<'groups', typeof groupRelationMap> {
@@ -340,8 +340,8 @@ export function useGroupsCrud() {
 
 // Resource Competency
 export const resourceCompetencyRelationMap: ForeignKeyRelationMap<'resource_competencies'> = {
-  'resource_competencies_resource_id_fkey': { alias: 'resource', referencedTable: 'resources' },
-  'resource_competencies_specific_competency_id_fkey': { alias: 'specific_competency', referencedTable: 'specific_competencies' }
+  'resource_competencies_resource_id_fkey': { alias: 'resource', referencedTable: 'resources', isOneToMany: false },
+  'resource_competencies_specific_competency_id_fkey': { alias: 'specific_competency', referencedTable: 'specific_competencies', isOneToMany: false }
 } as const;
 
 export class ResourceCompetencyController extends QueryController<'resource_competencies', typeof resourceCompetencyRelationMap> {
@@ -370,9 +370,9 @@ export function useResourceCompetenciesCrud() {
 
 // Resource Evaluation
 export const resourceEvaluationRelationMap: ForeignKeyRelationMap<'resource_evaluations'> = {
-  'resource_evaluations_evaluator_id_fkey': { alias: 'evaluator', referencedTable: 'users' },
-  'resource_evaluations_resource_id_fkey': { alias: 'resource', referencedTable: 'resources' },
-  'resource_evaluations_user_id_fkey': { alias: 'user', referencedTable: 'users' }
+  'resource_evaluations_evaluator_id_fkey': { alias: 'evaluator', referencedTable: 'users', isOneToMany: false },
+  'resource_evaluations_resource_id_fkey': { alias: 'resource', referencedTable: 'resources', isOneToMany: false },
+  'resource_evaluations_user_id_fkey': { alias: 'user', referencedTable: 'users', isOneToMany: false }
 } as const;
 
 export class ResourceEvaluationController extends QueryController<'resource_evaluations', typeof resourceEvaluationRelationMap> {
@@ -401,12 +401,17 @@ export const useResourceEvaluationsCrud = () => {
 
 // Resource 
 export const resourceRelationMap = {
-  'resources_author_id_fkey': { alias: 'author', referencedTable: 'users' },
-  'resources_mentor_id_fkey': { alias: 'mentor', referencedTable: 'users' },
-  'resources_evaluator_id_fkey': { alias: 'evaluator', referencedTable: 'users' },
-  'resources_class_id_fkey': { alias: 'class', referencedTable: 'classes' },
-  'resources_discipline_id_fkey': { alias: 'discipline', referencedTable: 'disciplines' },
-  'resources_specific_competency_id_fkey': { alias: 'specific_competency', referencedTable: 'specific_competencies' },
+  'resources_author_id_fkey': { alias: 'author', referencedTable: 'users', isOneToMany: false },
+  'resources_mentor_id_fkey': { alias: 'mentor', referencedTable: 'users', isOneToMany: false },
+  'resources_evaluator_id_fkey': { alias: 'evaluator', referencedTable: 'users', isOneToMany: false },
+  'resources_class_id_fkey': { alias: 'class', referencedTable: 'classes', isOneToMany: false },
+  'resources_discipline_id_fkey': { alias: 'discipline', referencedTable: 'disciplines', isOneToMany: false },
+  'resource_competency_resource_id_fkey': { 
+    alias: 'specific_competencies', 
+    referencedTable: 'resource_competency', 
+    isOneToMany: true,
+    nested: 'competency:specific_competencies(*)'
+  },
 } as const;
 
 export class ResourceController extends QueryController<'resources', typeof resourceRelationMap> {
@@ -436,8 +441,8 @@ export const useResourcesCrud = () => {
 // Specific Competency
 
 export const specificCompetencyRelationMap = {
-  'specific_competencies_class_id_fkey': { alias: 'class', referencedTable: 'classes' },
-  'specific_competencies_competency_id_fkey': { alias: 'competency', referencedTable: 'general_competencies' }
+  'specific_competencies_class_id_fkey': { alias: 'class', referencedTable: 'classes', isOneToMany: false },
+  'specific_competencies_competency_id_fkey': { alias: 'competency', referencedTable: 'general_competencies', isOneToMany: false, nested: 'discipline:disciplines(*)' },
 } as const;
 
 export class SpecificCompetencyController extends QueryController<'specific_competencies', typeof specificCompetencyRelationMap> {
@@ -487,3 +492,36 @@ export const useUsersCrud = () => {
   const controller = useUsersController()
   return useCrud(controller, "users")
 }
+
+
+
+export type ResourceSpecificCompetency = Awaited<ReturnType<ResourceSpecificCompetencyController['getById']>>;
+export type ResourceSpecificCompetencyInsert = Parameters<ResourceSpecificCompetencyController['create']>[0];
+export type ResourceSpecificCompetencyUpdate = Parameters<ResourceSpecificCompetencyController['update']>[1];
+
+export const resourceSpecificCompetencyRelationMap: ForeignKeyRelationMap<'resource_competency'> = {
+ resource_competency_competency_id_fkey: { alias: 'competency', referencedTable: 'specific_competencies', isOneToMany: false },
+ resource_competency_resource_id_fkey: { alias: 'resource', referencedTable: 'resources', isOneToMany: false },
+}
+
+export class ResourceSpecificCompetencyController extends QueryController<'resource_competency'> {
+  constructor(client: TypedSupabaseClient) {
+    super(client, 'resource_competency', {
+      fields: ['*'],
+      relationMap: resourceSpecificCompetencyRelationMap,
+    });
+  }
+}
+
+
+export const useResourceSpecificCompetenciesController: UseControllerHook<'resource_competency'> = () => {
+  const supabase = useSupabaseBrowser();
+  const controller = new ResourceSpecificCompetencyController(supabase);
+  return useMemo(() => controller, [supabase, controller]);
+}
+
+export const useResourceSpecificCompetenciesCrud = () => {
+  const controller = useResourceSpecificCompetenciesController()
+  return useCrud(controller, "resource_competency")
+}
+

@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { useUsersCrud } from "@/hooks/use-controllers"
+import { useUsersController, useUsersCrud } from "@/hooks/use-controllers"
 import { PaginationParams, QueryFilter } from "@/lib/query-controller"
 import { SearchableDropdown } from "@/components/ui/searchable-dropdown"
 import { Avatar } from "@/components/ui/avatar"
@@ -21,7 +21,7 @@ interface MultiSelectUserProps {
   value: User[];
   onChange: (users: User[]) => void;
   placeholder?: string;
-  disabled?: boolean; 
+  disabled?: boolean;
   filters?: QueryFilter[]
 }
 
@@ -29,7 +29,7 @@ export function MultiSelectUser({ value, onChange, filters, placeholder = "Adaug
   const pageSize = 100 // Large enough for most use cases
 
   // Use the useUsersCrud hook to get the React Query hooks
-  const usersCrud = useUsersCrud()
+  const usersController = useUsersController()
 
   // Custom render function for user items
   const renderUserItem = (user: any, isSelected: boolean) => {
@@ -50,9 +50,9 @@ export function MultiSelectUser({ value, onChange, filters, placeholder = "Adaug
           )}
         </div>
         <div className="flex items-center gap-3">
-          <Avatar 
-            size="32" 
-            src={user.avatar_url} 
+          <Avatar
+            size="32"
+            src={user.avatar_url}
             alt={name}
             initials={initials}
             variant={user.avatar_url ? "populated" : "empty"}
@@ -72,7 +72,8 @@ export function MultiSelectUser({ value, onChange, filters, placeholder = "Adaug
 
   return (
     <SearchableDropdown
-      useQueryHook={usersCrud.useList}
+      filterKey="multi-select-users-dropdown"
+      fetchHook={(params) => usersController.getPaginatedData(params)}
       placeholder={placeholder}
       valueField="id"
       labelField="email"

@@ -6,6 +6,8 @@ import { Check, Loader2, ChevronsUpDown, Search, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type {
   ForeignKeyRelationMap,
+  PaginatedResult,
+  PaginationParams,
   QueryFilter,
   TableNames,
   UsePaginatedHook,
@@ -24,8 +26,9 @@ function getNestedValue(obj: any, path: string | number): any {
   }
 }
 
-export interface SearchableDropdownProps<T, C extends TableNames, M extends ForeignKeyRelationMap<C>> {
-  useQueryHook: UsePaginatedHook<T>
+export interface SearchableDropdownProps<T extends TableNames, M extends ForeignKeyRelationMap<T>> {
+  filterKey: string
+  fetchHook: (params: PaginationParams)=> Promise<PaginatedResult<WithRelations<T, M>>>
   placeholder?: string
   emptyMessage?: string
   /**
@@ -48,7 +51,7 @@ export interface SearchableDropdownProps<T, C extends TableNames, M extends Fore
    * For single mode: (value: T | null) => void
    * For multiple mode: (value: T[]) => void
    */
-  onChange: ((value: T | null) => void) | ((value: T[]) => void)
+  onChange: ((value: any | null) => void) | ((value: any[]) => void)
   /**
    * For single mode: any | null
    * For multiple mode: T[]
@@ -70,11 +73,11 @@ export interface SearchableDropdownProps<T, C extends TableNames, M extends Fore
 }
 
 export function SearchableDropdown<
-  T extends WithRelations<C, M>,
-  C extends TableNames,
-  M extends ForeignKeyRelationMap<C>,
+  T extends TableNames,
+  M extends ForeignKeyRelationMap<T>,
 >({
-  useQueryHook,
+  filterKey,
+  fetchHook,
   placeholder = "Select an item...",
   emptyMessage = "No results found.",
   valueField,
@@ -94,33 +97,46 @@ export function SearchableDropdown<
   error,
   filters,
   ...props
-}: SearchableDropdownProps<T, C, M>) {
+}: SearchableDropdownProps<T, M>) {
   // Memoize initial params
   const memoizedInitialParams = useMemo(
-    () => ({
-      pageSize,
-      searchTerm: "",
-      searchColumns,
-      filters,
-    }),
+    () => {
+      return {
+        pageSize,
+        searchTerm: "",
+        searchColumns,
+        filters,
+      };
+    },
     [pageSize, searchColumns, filters],
   )
 
-  const { pageIndex, totalPages, searchTerm, setSearchTerm, query, goToNextPage, results, handleFiltersChanged } =
-    useInfiniteDataTable<T>(useQueryHook, memoizedInitialParams)
+  const {
+    pageIndex,
+    totalPages,
+    searchTerm,
+    setSearchTerm,
+    query,
+    goToNextPage,
+    results,
+    handleFiltersChanged
+  } = useInfiniteDataTable(fetchHook, memoizedInitialParams, filterKey)
+
+
 
   useEffect(() => {
     const _filters: Record<string, any> = {}
     for (const filter of filters ?? []) {
       _filters[filter.column] = filter.value
     }
-    // console.log(_filters)
     handleFiltersChanged(_filters)
   }, [filters])
 
   // UI State
   const [open, setOpen] = useState(false)
   const [isEndOfListInView, setIsEndOfListInView] = useState(false)
+
+
 
   // Fetch more data when scrolling to the end
   useEffect(() => {
@@ -231,10 +247,15 @@ export function SearchableDropdown<
   }, [open, onOpenChange])
 
   const renderResults = useCallback(() => {
-    // // console.log(`[LOG] RESULTS ${JSON.stringify(results)}`)
-
+    results.forEach((item, index) => {
+      if (index < 5) {
+        const isSelected = isItemSelected(item);
+        const itemValue = getNestedValue(item, valueField);
+        const itemLabel = getNestedValue(item, labelField);
+      }
+    });
     return results.map((item, index) => {
-      const isSelected = isItemSelected(item)
+      const isSelected = isItemSelected(item);
       return (
         <div
           key={index}
@@ -267,7 +288,16 @@ export function SearchableDropdown<
         </div>
       )
     })
-  }, [results])
+  }, [results, searchTerm, query.data, query.isLoading, mode, valueField, labelField, renderItem, isItemSelected, handleItemSelect, onChange])
+
+
+  useEffect(() => {
+    if(query.data?.data){
+      console.log("[SearchableDropdown] Data updated", query.data.data, results)
+
+    }
+  },[query.data, results])
+
 
   return (
     <div className="relative w-full">
@@ -346,13 +376,15 @@ export function SearchableDropdown<
 
               return (
                 <div key={index} className="flex items-center gap-2 bg-gray-100 rounded-md pl-2 pr-1 py-1 mb-1">
-                  <Avatar
-                    size="32"
-                    src={avatarSrc}
-                    alt={label}
-                    initials={initials}
-                    variant={avatarSrc ? "populated" : "empty"}
-                  />
+                  {avatarField && (
+                    <Avatar
+                      size="32"
+                      src={avatarSrc}
+                      alt={label}
+                      initials={initials}
+                      variant={avatarSrc ? "populated" : "empty"}
+                    />
+                  )}
                   <span className="text-sm">{label}</span>
                   <button
                     type="button"

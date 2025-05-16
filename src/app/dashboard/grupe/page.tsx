@@ -2,20 +2,23 @@
 
 import { useState, useMemo } from "react"
 import { Button } from "@/components/ui/button"
-import { Trash2, Users, BookOpen, Plus, UserPlus } from "lucide-react"
+import { Trash2, Users, BookOpen, Plus, UserPlus, Upload } from "lucide-react";
 import { DataTable, type Filter } from "@/components/ui/data-table/data-table"
 import { type ColumnDef } from "@tanstack/react-table"
 import { Avatar } from "@/components/ui/avatar"
 import { format } from "date-fns"
 import { ro } from "date-fns/locale"
-import { SidebarProvider, Sidebar, SidebarItem, SidebarSection } from "@/components/ui/sidebar"
+import { SidebarProvider } from "@/components/ui/sidebar"
+import InfiniteGroupsSidebar from "@/components/groups/InfiniteGroupsSidebar"
 import { useAuth } from "@/lib/auth-context"
 import { z } from "zod"
-import { GroupMember, useGroupMembersController, useGroupMembersCrud, useGroupsCrud, useUsersCrud } from "@/hooks/use-controllers"
+import { GroupMember, useGroupMembersController, useGroupMembersCrud, useGroupsController, useGroupsCrud, useUsersController, useUsersCrud } from "@/hooks/use-controllers"
 import { QueryFilter, UsePaginatedHook } from "@/lib/query-controller"
 import { AddGroupDialog } from "@/components/groups/add-group-dialog"
 import { DeleteGroupDialog } from "@/components/groups/delete-group-dialog"
 import { AddStudentsDialog } from "@/components/groups/add-students-dialog"
+import { BulkUploadGroupsDialog } from "@/components/groups/bulk-upload-group"
+import { BulkUploadMembersDialog } from "@/components/groups/bulk-upload-members"
 
 // Define the form schema
 const groupFormSchema = z.object({
@@ -43,6 +46,8 @@ export default function GrupePage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isAddMemberDialogOpen, setIsAddMemberDialogOpen] = useState(false)
+  const [isBulkUploadGroupsDialogOpen, setIsBulkUploadGroupsDialogOpen] = useState(false)
+  const [isBulkUploadMembersDialogOpen, setIsBulkUploadMembersDialogOpen] = useState(false)
   const { user, profile } = useAuth()
 
   // Create group mutation
@@ -70,7 +75,7 @@ export default function GrupePage() {
     if (selectedGroup) {
       return [
         {
-          column: 'group.id',
+          column: 'group_id',
           operator: 'eq',
           value: selectedGroup
         }
@@ -118,11 +123,13 @@ export default function GrupePage() {
     pageSize: 5
   }), [])
 
-
   // Handle group deletion
   const handleDeleteGroup = () => {
     setIsDeleteDialogOpen(true)
   }
+
+  const groupController = useGroupsController()
+  const userController = useUsersController()
 
   // Table filters for DataTable
   const tableFilters: Filter[] = [
@@ -132,8 +139,10 @@ export default function GrupePage() {
       type: "controller",
       icon: <Users className="h-4 w-4 text-gray-400" />,
       queryColumn: "group_id",
-      controller: groupControllerConfig,
-      controllerHook: useGroups
+      valueField: "id",
+      labelField: "name",
+      searchColumns: ["name"],
+      fetchHook: (params) => groupController.getPaginatedData(params)
     },
     {
       id: "user",
@@ -141,8 +150,10 @@ export default function GrupePage() {
       type: "controller",
       icon: <BookOpen className="h-4 w-4 text-gray-400" />,
       queryColumn: "user_id",
-      controller: userControllerConfig,
-      controllerHook: useUsers
+      valueField: "id",
+      labelField: "email",
+      searchColumns: ["email", "first_name", "last_name"],
+      fetchHook: (params) => userController.getPaginatedData(params)
     }
     // Add more filters as needed (e.g., by role, email, etc.)
   ];
@@ -222,32 +233,13 @@ export default function GrupePage() {
 
   return (
     <SidebarProvider>
-      <div className="flex h-[calc(100vh-4rem)]">
+      <div className="flex h-[calc(100vh-11rem)]">
         {/* Sidebar for groups */}
-        <Sidebar
-          className="h-full border-r border-gray-200"
-        >
-          <SidebarSection title="Toate grupele">
-            {groupsLoading ? (
-              <div className="p-4 text-center"></div>
-            ) : groups.length === 0 ? (
-              <div className="p-4 text-center">Nu există grupe</div>
-            ) : (
-              groups.map((group) => (
-                <SidebarItem
-                  key={group?.id}
-                  isActive={selectedGroup === group?.id}
-                  onClick={() => toggleGroupSelection(group?.id ?? '')}
-                  icon={<Users className="h-4 w-4" />}
-                >
-                  <div className="flex items-center justify-between w-full">
-                    <span>{group?.name}</span>
-                  </div>
-                </SidebarItem>
-              ))
-            )}
-          </SidebarSection>
-        </Sidebar>
+        <InfiniteGroupsSidebar
+          selectedGroup={selectedGroup}
+          onSelect={toggleGroupSelection}
+          filters={groupsFilter}
+        />
         {/* Main content */}
         <div className="flex-1 overflow-auto p-6">
           {/* Header with title and actions */}
@@ -256,7 +248,7 @@ export default function GrupePage() {
               {selectedGroup ? groups.find(g => g?.id === selectedGroup)?.name || "Grupe" : "Toate grupele"}
             </h1>
             <div className="flex space-x-2">
-              {selectedGroup && (
+              {selectedGroup ? (
                 <>
                   <Button
                     variant="outline"
@@ -266,6 +258,7 @@ export default function GrupePage() {
                     <UserPlus className="h-4 w-4 mr-2" />
                     Adaugă cursant
                   </Button>
+                  
                   <Button
                     variant="outline"
                     className="flex items-center space-x-1 text-red-500 hover:text-red-600 hover:bg-red-50 border-red-200 hover:border-red-300"
@@ -273,6 +266,25 @@ export default function GrupePage() {
                   >
                     <Trash2 className="h-4 w-4 mr-2" />
                     Șterge grupa
+                  </Button>
+                </>
+              ) : (
+                <>
+                <Button
+                  variant="outline"
+                  className="flex items-center space-x-1"
+                  onClick={() => setIsBulkUploadGroupsDialogOpen(true)}
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  Adaugă grupe bulk
+                </Button>
+                <Button
+                    variant="outline"
+                    className="flex items-center space-x-1"
+                    onClick={() => setIsBulkUploadMembersDialogOpen(true)}
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    Adaugă cursanți bulk
                   </Button>
                 </>
               )}
@@ -320,6 +332,19 @@ export default function GrupePage() {
       <AddGroupDialog
         open={isDialogOpen}
         onOpenChange={setIsDialogOpen}
+      />
+
+      {/* Bulk Upload Groups Dialog */}
+      <BulkUploadGroupsDialog
+        open={isBulkUploadGroupsDialogOpen}
+        onOpenChange={setIsBulkUploadGroupsDialogOpen}
+      />
+
+      {/* Bulk Upload Members Dialog */}
+      <BulkUploadMembersDialog
+        open={isBulkUploadMembersDialogOpen}
+        onOpenChange={setIsBulkUploadMembersDialogOpen}
+        groupId={selectedGroup ?? ''}
       />
     </SidebarProvider>
   )

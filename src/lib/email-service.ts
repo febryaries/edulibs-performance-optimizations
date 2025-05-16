@@ -1,6 +1,9 @@
 import nodemailer from 'nodemailer';
 import { render } from '@react-email/components';
 import { EmailTemplate } from '@/emails/email-template';
+import { Resend } from 'resend';
+
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 // Create a transporter using Gmail SMTP relay
 const transporter = nodemailer.createTransport({
@@ -38,15 +41,22 @@ export async function sendEmail({
     const recipients = Array.isArray(to) ? to : [to];
 
     // Send the email
-    const info = await transporter.sendMail({
+    // const info = await transporter.sendMail({
+    //   from: `${process.env.GMAIL_FROM_NAME || 'EDU Apps'} <${process.env.GMAIL_FROM_EMAIL || process.env.GMAIL_USER}>`,
+    //   to: recipients,
+    //   subject,
+    //   html,
+    // });
+    // // // console.log('[LOG] Email sent successfully:', info.messageId);
+    // return { success: true, messageId: info.messageId };
+    const result = await resend.emails.send({
       from: `${process.env.GMAIL_FROM_NAME || 'EDU Apps'} <${process.env.GMAIL_FROM_EMAIL || process.env.GMAIL_USER}>`,
       to: recipients,
       subject,
       html,
     });
 
-    // // console.log('[LOG] Email sent successfully:', info.messageId);
-    return { success: true, messageId: info.messageId };
+    return { success: result.error === null, messageId: result.data?.id };
   } catch (error) {
     console.error('Error sending email:', error);
     throw error;

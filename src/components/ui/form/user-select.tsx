@@ -5,8 +5,8 @@ import { Check } from "lucide-react"
 import { SearchableDropdown } from "@/components/ui/searchable-dropdown"
 import { Avatar } from "@/components/ui/avatar"
 import { AvatarImage, AvatarFallback } from "@/components/ui/avatar-components"
-import { useUsersCrud } from "@/hooks/use-controllers"
-import { QueryFilter } from "@/lib/query-controller"
+import { useUsersController, useUsersCrud } from "@/hooks/use-controllers"
+import { QueryFilter, QueryFilter } from "@/lib/query-controller"
 
 interface UserSelectProps {
   value: string
@@ -36,7 +36,7 @@ export function UserSelect({
   required = false,
 }: UserSelectProps) {
   // Use the paginated hook from users CRUD
-  const { useList } = useUsersCrud();
+  const usersController = useUsersController();
 
   const usersFilter: QueryFilter[] = useMemo(() => {
     return [{
@@ -54,7 +54,8 @@ export function UserSelect({
         </label>
       )}
       <SearchableDropdown
-        useQueryHook={useList}
+        filterKey="user-select-user-dropdown"
+        fetchHook={(params) => usersController.getPaginatedData(params)}
         value={value}
         onChange={(e) => onChange(e.id)}
         valueField="id"

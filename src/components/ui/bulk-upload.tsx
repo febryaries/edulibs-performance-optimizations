@@ -8,9 +8,11 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Trash2, Plus, X, Check, ChevronDown, Loader2 } from "lucide-react"
 import { z } from "zod"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { SearchableDropdown } from "@/components/ui/searchable-dropdown"
+import { ForeignKeyRelationMap, PaginatedResult, PaginationParams, QueryFilter, TableNames, UsePaginatedHook, WithRelations } from "@/lib/query-controller"
 
 // Types
-export type ColumnType = "string" | "number" | "date" | "email" | "boolean" | "select"
+export type ColumnType = "string" | "number" | "date" | "email" | "boolean" | "select" | "searchable-select"
 
 export interface SelectOption {
   value: string
@@ -24,6 +26,14 @@ export interface ColumnConfig {
   required?: boolean
   validation?: z.ZodType<any>
   options?: SelectOption[] // For select type columns
+  searchable?: boolean // For searchable select columns
+  // New properties for SearchableDropdown integration
+  key: string;
+  fetchHook: (params: PaginationParams)=> Promise<PaginatedResult<WithRelations<any, ForeignKeyRelationMap<any>>>>
+  valueField?: string
+  labelField?: string
+  searchColumns?: string[]
+  filters?: QueryFilter[]
 }
 
 export interface RowData {
@@ -68,6 +78,17 @@ const getDefaultValidation = (column: ColumnConfig): z.ZodType<any> => {
       )
       break
     case "select":
+      if (column.options && column.options.length > 0) {
+        // Create a schema that validates against the available options
+        const validValues = column.options.map((opt) => opt.value)
+        schema = z
+          .string()
+          .refine((val) => validValues.includes(val), { message: `Must be one of: ${validValues.join(", ")}` })
+      } else {
+        schema = z.string()
+      }
+      break
+    case "searchable-select":
       if (column.options && column.options.length > 0) {
         // Create a schema that validates against the available options
         const validValues = column.options.map((opt) => opt.value)
@@ -211,14 +232,18 @@ const SelectableCell = ({
   onChange,
   options,
   validationStatus,
+  searchable = false,
 }: {
   value: string
   onChange: (value: string) => void
   options: SelectOption[]
   validationStatus: "valid" | "invalid" | "neutral"
+  searchable?: boolean
 }) => {
   const [isOpen, setIsOpen] = useState(false)
   const [inputValue, setInputValue] = useState(value)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [filteredOptions, setFilteredOptions] = useState(options)
 
   // Find the label for the current value
   const currentLabel = options.find((opt) => opt.value === value)?.label || value
@@ -230,10 +255,25 @@ const SelectableCell = ({
     }
   }, [value])
 
+  // Filter options based on search query
+  useEffect(() => {
+    if (searchable && searchQuery) {
+      const filtered = options.filter(option => 
+        option.label.toLowerCase().includes(searchQuery.toLowerCase()))
+      setFilteredOptions(filtered)
+    } else {
+      setFilteredOptions(options)
+    }
+  }, [searchQuery, options, searchable])
+
   // Handle input change without immediately propagating to parent
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value
-    setInputValue(newValue)
+    if (searchable) {
+      setSearchQuery(newValue)
+    } else {
+      setInputValue(newValue)
+    }
     // Don't call onChange here to avoid the loop
   }
 
@@ -242,11 +282,14 @@ const SelectableCell = ({
     setInputValue(selectedValue)
     onChange(selectedValue) // Safe to call onChange here as it's a user action
     setIsOpen(false)
+    setSearchQuery("") // Clear search query when selection is made
   }
 
   // Handle blur to update parent when user finishes typing
   const handleBlur = () => {
-    onChange(inputValue)
+    if (!searchable) {
+      onChange(inputValue)
+    }
   }
 
   // Determine background color based on validation status
@@ -266,30 +309,93 @@ const SelectableCell = ({
       <PopoverTrigger asChild>
         <div className="relative w-full">
           <Input
-            value={inputValue}
+            value={searchable ? searchQuery : inputValue}
             onChange={handleInputChange}
             onBlur={handleBlur}
             className={`border-0 rounded-none focus:ring-0 h-10 px-4 ${getBgColorClass()}`}
             onClick={() => setIsOpen(true)}
+            placeholder={searchable ? "Caută..." : undefined}
           />
           <ChevronDown className="absolute right-3 top-3 h-4 w-4 opacity-50" />
         </div>
       </PopoverTrigger>
-      <PopoverContent className="w-[200px] p-0">
+      <PopoverContent className="w-[300px] p-0">
         <div className="max-h-[300px] overflow-auto">
-          {options.map((option) => (
-            <div
-              key={option.value}
-              className="flex items-center px-3 py-2 text-sm cursor-pointer hover:bg-gray-100"
-              onClick={() => handleSelect(option.value)}
-            >
-              <div className="flex-1">{option.label}</div>
-              {option.value === inputValue && <Check className="h-4 w-4 ml-2" />}
-            </div>
-          ))}
+          {filteredOptions.length > 0 ? (
+            filteredOptions.map((option) => (
+              <div
+                key={option.value}
+                className="flex items-center px-3 py-2 text-sm cursor-pointer hover:bg-gray-100"
+                onClick={() => handleSelect(option.value)}
+              >
+                <div className="flex-1">{option.label}</div>
+                {option.value === inputValue && <Check className="h-4 w-4 ml-2" />}
+              </div>
+            ))
+          ) : (
+            <div className="px-3 py-2 text-sm text-gray-500">Nu s-au găsit rezultate</div>
+          )}
         </div>
       </PopoverContent>
     </Popover>
+  )
+}
+
+// SearchableSelectCell component for searchable-select type columns
+const SearchableSelectCell = ({
+  value,
+  onChange,
+  column,
+  validationStatus,
+}: {
+  value: string
+  onChange: (value: string) => void
+  column: ColumnConfig
+  validationStatus: "valid" | "invalid" | "neutral"
+}) => {
+  // Ensure we have the required props for SearchableDropdown
+  if (!column.fetchHook) {
+    return (
+      <div className="text-red-500 text-xs p-2">
+        fetchHook is required for searchable-select
+      </div>
+    )
+  }
+
+  // Get background color based on validation status
+  const getBgColorClass = () => {
+    switch (validationStatus) {
+      case "valid":
+        return "bg-green-50"
+      case "invalid":
+        return "bg-red-50"
+      default:
+        return "bg-transparent"
+    }
+  }
+
+  return (
+    <div className={`${getBgColorClass()} h-10`}>
+      <SearchableDropdown
+        filterKey={column.key}
+        fetchHook={column.fetchHook}
+        valueField={column.valueField || "id"}
+        labelField={column.labelField || "name"}
+        mode="single"
+        onChange={(newValue) => {
+          // Handle the selected value
+          if (newValue) {
+            onChange(newValue)
+          }
+        }}
+        value={value}
+        searchColumns={column.searchColumns || []}
+        filters={column.filters}
+        className="border-0"
+        triggerClassName="border-0 h-10 py-0"
+        contentClassName="w-[300px]"
+      />
+    </div>
   )
 }
 
@@ -351,9 +457,14 @@ export default function BulkUpload({ columns, onSubmit, onCancel, isLoading }: B
           // Make sure we don't go beyond available columns
           if (targetColumnIndex < columns.length) {
             const columnId = columns[targetColumnIndex].id
+            const columnType = columns[targetColumnIndex].type
+            const trimmedValue = cellValue.trim()
+            
+            // For searchable-select columns, we want to set the value directly
+            // This allows pasting email addresses directly into searchable dropdowns
             newRows[targetRowIndex] = {
               ...newRows[targetRowIndex],
-              [columnId]: cellValue.trim(),
+              [columnId]: trimmedValue,
             }
           }
         })
@@ -403,6 +514,17 @@ export default function BulkUpload({ columns, onSubmit, onCancel, isLoading }: B
     const hasValue = value !== ""
     const validationStatus = getCellValidationStatus(row, column.id, hasValue)
 
+    if (column.type === "searchable-select") {
+      return (
+        <SearchableSelectCell
+          value={value}
+          onChange={(value) => handleCellChange(row._id, column.id, value)}
+          column={column}
+          validationStatus={validationStatus}
+        />
+      )
+    }
+    
     if (column.type === "select" && column.options) {
       return (
         <SelectableCell
@@ -410,6 +532,7 @@ export default function BulkUpload({ columns, onSubmit, onCancel, isLoading }: B
           onChange={(value) => handleCellChange(row._id, column.id, value)}
           options={column.options}
           validationStatus={validationStatus}
+          searchable={column.searchable}
         />
       )
     }
@@ -453,12 +576,20 @@ export default function BulkUpload({ columns, onSubmit, onCancel, isLoading }: B
                   <span className="text-sm font-medium text-gray-700">{column.name}</span>
                 </div>
                 <div className="relative">
-                  {column.type === "select" && column.options ? (
+                  {column.type === "searchable-select" ? (
+                    <SearchableSelectCell
+                      value={value}
+                      onChange={(value) => handleCellChange(row._id, column.id, value)}
+                      column={column}
+                      validationStatus={validationStatus}
+                    />
+                  ) : column.type === "select" && column.options ? (
                     <SelectableCell
                       value={value}
                       onChange={(value) => handleCellChange(row._id, column.id, value)}
                       options={column.options}
                       validationStatus={validationStatus}
+                      searchable={column.searchable}
                     />
                   ) : (
                     <div className="relative">
@@ -605,7 +736,7 @@ export default function BulkUpload({ columns, onSubmit, onCancel, isLoading }: B
               Adăugare în curs...
             </>
           ) : (
-            "Adaugă utilizatori"
+            "Adaugă"
           )}
         </Button>
       </div>

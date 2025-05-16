@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useEffect, useMemo, useCallback } from "react"
+import { useRef, useEffect, useMemo, useCallback, useState } from "react"
 import { useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Save, Maximize2, Trash2, X, Check, ArrowLeft } from "lucide-react"
@@ -8,26 +8,29 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { TextArea } from "@/components/ui/text-area"
 import { SearchableDropdown } from "@/components/ui/searchable-dropdown"
-import { UserSelect } from "@/components/ui/form/user-select"
 import { DatePicker } from "@/components/ui/form/date-picker"
 import { resourceSchema, type ResourceFormValues } from "@/schemas/resource-schema"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
-import { useSupabaseBrowser } from "@/utils/supabase/client"
-import { isAdmin, isModerator, isEvaluator, isStudent, useAuth } from "@/lib/auth-context"
+import { Tooltip } from "@/components/ui/tooltip"
+import { isAdmin, isEvaluator, isModerator, isStudent, useAuth } from "@/lib/auth-context"
 import {
   Resource,
   useResourcesCrud,
   useDisciplineClassCrud,
-  useDisciplinesCrud,
   useSpecificCompetenciesCrud,
-  DisciplineClass,
-  SpecificCompetency,
   useUsersCrud,
-  Profile
+  Profile,
+  useClassesCrud,
+  useGroupMembersController,
+  useSpecificCompetenciesController,
+  useClassesController,
+  useDisciplineClassController,
+  useUsersController,
 } from "@/hooks/use-controllers"
-import { QueryFilter, UsePaginatedHook } from "@/lib/query-controller"
+import { QueryFilter } from "@/lib/query-controller"
 import { Avatar } from "../ui/avatar"
 import { AvatarFallback, AvatarImage } from "../ui/avatar-components"
+import type { SpecificCompetency } from "@/hooks/use-controllers";
 
 // Mock data for dropdowns
 const statusOptions = [
@@ -35,7 +38,9 @@ const statusOptions = [
   { value: "CONFORMABLE", label: "Conform" },
   { value: "UNCONFORMABLE", label: "Neconform" },
   { value: "IN_REVIEW", label: "În evaluare" },
-]
+];
+
+
 
 interface ResourceFormProps {
   onClose: () => void
@@ -60,6 +65,14 @@ export function ResourceForm({
   isEditMode,
   resource: resourceProp
 }: ResourceFormProps) {
+  const { user } = useAuth();
+  const isUserAdmin = isAdmin(user);
+  const isUserModerator = isModerator(user);
+  const isUserStudent = isStudent(user);
+  const isUserEvaluator = isEvaluator(user);
+  const groupMembersController = useGroupMembersController();
+
+  // --- End student mentor auto-set logic ---
   const titleInputRef = useRef<HTMLInputElement>(null)
 
   // Determine if we're in edit mode
@@ -67,12 +80,29 @@ export function ResourceForm({
 
   const { useById: useResourceById } = useResourcesCrud()
   const { data: resource } = useResourceById(resourceProp?.id || '');
-  const { user } = useAuth();
 
-  // Check user roles for permissions
-  const isUserAdmin = isAdmin(user);
-  const isUserModerator = isModerator(user);
-  const isUserStudent = isStudent(user);
+  const classesController = useClassesController();
+  const disciplineClassController = useDisciplineClassController();
+  const usersController = useUsersController();
+  const specificCompetenciesController = useSpecificCompetenciesController();
+
+  // Multi-select state for competencies
+  const [selectedCompetencies, setSelectedCompetencies] = useState<SpecificCompetency[]>([]);
+
+  const { useAll: useAllSpecificCompetencies } = useSpecificCompetenciesCrud();
+
+  const competencies = useAllSpecificCompetencies({
+    filters: [
+      { column: 'id', operator: 'in', value: resource?.specific_competencies?.map((c) => c.id) || [] },
+    ]
+  });
+
+  // Effect to load competencies from resource when in edit mode
+  useEffect(() => {
+    if (isEditModeLocal && resource?.specific_competencies) {
+      setSelectedCompetencies(competencies.data || []);
+    }
+  }, [isEditModeLocal, resource?.specific_competencies, competencies.data]);
 
   // Determine if the form should be in moderator-only mode (only evaluator field editable)
   const isModeratorMode = isUserModerator && resource?.status === "IN_REVIEW" && !isUserAdmin;
@@ -84,7 +114,7 @@ export function ResourceForm({
       title: resource?.title || initialData?.title || "Resursă Nouă",
       discipline_id: resource?.discipline_id || initialData?.discipline_id || -1,
       class_id: resource?.class_id || initialData?.class_id || -1,
-      specific_competency_id: resource?.specific_competency_id || initialData?.specific_competency_id || -1,
+      specific_competence_text: resource?.specific_competence_text || initialData?.specific_competence_text || "",
       created_at: resource?.created_at ? new Date(resource.created_at) : initialData?.created_at || new Date(),
       status: resource?.status || initialData?.status || "DRAFT",
       mentor_id: resource?.mentor_id || initialData?.mentor_id || "",
@@ -104,17 +134,34 @@ export function ResourceForm({
     }
   }, [])
 
+  async function setMentor() {
+    if (!user) return;
+    const group = await groupMembersController.findOneByFilter({
+      filters: [
+        { column: 'user_id', operator: 'eq', value: user?.id },
+      ]
+    });
+    if (!group) return;
+    console.log("MENTOR ID", group.group?.created_by)
+    setMentorId(group.group?.created_by || null);
+    form.setValue('mentor_id', group.group?.created_by);
+  }
+
+  // Set mentor_id for students on first group load
+  useEffect(() => {
+    if (isUserStudent) {
+      setMentor()
+    }
+  }, [isUserStudent]);
+
   // Effect to manually reset form with resource values when in edit mode
   useEffect(() => {
     if (isEditModeLocal && resource) {
-      // // console.log("[LOG] Manually resetting form with resource values:", resource);
-
       // Create a complete form data object from the resource
       const formData = {
         title: resource.title || "Resursă Nouă",
         discipline_id: resource.discipline_id || -1,
         class_id: resource.class_id || -1,
-        specific_competency_id: resource.specific_competency_id || -1,
         created_at: resource.created_at ? new Date(resource.created_at) : new Date(),
         status: resource.status || "DRAFT",
         mentor_id: resource.mentor_id || "",
@@ -125,21 +172,11 @@ export function ResourceForm({
         comentarii: resource.comentarii || "",
         aggregate: resource.aggregate || "",
       };
-
-      // Log the form data we're setting
-      // // console.log("[LOG] Setting form values to:", formData);
-
-      // Reset the form with these values
       form.reset(formData);
-
-      // Also set each field individually to ensure it updates
       Object.entries(formData).forEach(([key, value]) => {
         // @ts-expect-error - we know these keys match our form fields
         form.setValue(key, value);
       });
-
-      // Log the form values after reset
-      // // console.log("[LOG] Form values after reset:", form.getValues());
     }
   }, [isEditModeLocal, resource, form]);
 
@@ -163,7 +200,10 @@ export function ResourceForm({
       }
 
       // Force a form validation to update the UI
-      form.trigger();
+      // Only trigger if the form is still valid (not being unmounted)
+      if (form && form.formState) {
+        form.trigger();
+      }
     }
   }, [isEditModeLocal, resource, form]);
 
@@ -171,62 +211,123 @@ export function ResourceForm({
   const disciplineId = useWatch({ control: form.control, name: 'discipline_id' });
   const classId = useWatch({ control: form.control, name: 'class_id' });
 
+  // Reset discipline and specific competency when class changes
+  // Only reset discipline and specific competency when classId actually changes (not on first mount)
+  const prevClassId = useRef<number | null>(null);
+  useEffect(() => {
+    if (prevClassId.current !== null && prevClassId.current !== classId) {
+      form.setValue('discipline_id', -1);
+    }
+    prevClassId.current = classId;
+  }, [classId, form]);
+
   const disciplineClassFilter: QueryFilter[] = useMemo(() => {
-    if (!disciplineId) return [];
+    if (!classId) return [];
     return [{
-      column: 'discipline_id',
+      column: 'class_id',
       operator: 'eq',
-      value: disciplineId
+      value: classId
     }];
-  }, [disciplineId]);
+  }, [classId]);
 
   const specificCompetencyFilter: QueryFilter[] = useMemo(() => {
-    if (!classId || !disciplineId) return [];
-    return [
-      { column: 'class_id', operator: 'eq', value: classId },
-      { column: 'competency.discipline_id', operator: 'eq', value: disciplineId }
+    if (!classId || !disciplineId) {
+      console.log('Missing classId or disciplineId for specificCompetencyFilter', { classId, disciplineId });
+      return [];
+    }
+
+    // Create a simpler filter structure that directly filters by class_id and discipline_id
+    const filter: QueryFilter[] = [
+      {
+        and: [
+          { column: 'class_id', operator: 'eq', value: classId } as QueryFilter,
+          { column: 'discipline_id', operator: 'eq', value: disciplineId } as QueryFilter
+        ]
+      } as QueryFilter
     ];
+
+    console.log('Generated specificCompetencyFilter:', filter);
+    return filter;
   }, [classId, disciplineId]);
 
-  const { useList: useDisciplines } = useDisciplinesCrud();
+  const { useList: useClasses } = useClassesCrud();
   const { useList: useDisciplineClass } = useDisciplineClassCrud();
   const { useList: useSpecificCompetencies } = useSpecificCompetenciesCrud();
   const { useList } = useUsersCrud();
 
+  const [mentorId, setMentorId] = useState<string | null>(null);
+
   const formatorFilter: QueryFilter[] = useMemo(() => {
-    return [
-      {
-      column: 'status',
-      operator: 'eq',
-      value: "ACTIVE",
-    },
-    {
-      column: 'role',
-      operator: 'eq',
-      value: "FORMATOR",
+    // If the user is a student, restrict to only their assigned mentor (group creator)
+    if (isUserStudent) {
+      if (mentorId) {
+        return [
+          { column: 'id', operator: 'eq', value: mentorId },
+          { column: 'status', operator: 'eq', value: "ACTIVE" },
+        ];
+      }
+      // If no mentorId is set, show none
+      return [
+        { column: 'id', operator: 'eq', value: -1 }
+      ];
     }
-  ];
-  }, []);
+    // Otherwise, show all active formators
+    return [
+      { column: 'status', operator: 'eq', value: "ACTIVE" },
+      { column: 'role', operator: 'eq', value: "FORMATOR" },
+    ];
+  }, [isUserStudent, form, mentorId]);
 
 
   const evalutaorFilter: QueryFilter[] = useMemo(() => {
     return [
       {
-      column: 'status',
-      operator: 'eq',
-      value: "ACTIVE",
-    },
-    {
-      column: 'role',
-      operator: 'eq',
-      value: "EVALUATOR",
-    }
-  ];
+        column: 'status',
+        operator: 'eq',
+        value: "ACTIVE",
+      },
+      {
+        column: 'role',
+        operator: 'eq',
+        value: "EVALUATOR",
+      }
+    ];
   }, []);
 
-  // Handle form submission
-  const onSubmit = (data: ResourceFormValues) => {
-    onSave(data)
+  // Handle form submission - just pass the form data to the parent's onSave
+  const onSubmit = async (data: ResourceFormValues) => {
+    // Include selected competencies in the data passed to onSave
+    const enhancedData = {
+      ...data,
+      // Pass the selected competencies to the parent component
+      selectedCompetencies: selectedCompetencies
+    };
+
+    // Call the parent's onSave with the form data and selected competencies
+    await onSave(enhancedData);
+  }
+
+  // Custom save handler to ensure validation before saving
+  const handleSave = async () => {
+    console.log('handleSave')
+
+    // Safety check to ensure form is still valid and not being unmounted
+    if (!form || !form.formState) {
+      console.error('Form is not available for validation');
+      return;
+    }
+
+    try {
+      const isValid = await form.trigger();
+      console.log('isValid', isValid)
+      console.log('form.errors()', form.formState.errors)
+      if (isValid) {
+        form.handleSubmit(onSubmit)();
+      }
+      // If not valid, errors will be shown by FormMessage
+    } catch (error) {
+      console.error('Error during form validation:', error);
+    }
   }
 
   const renderProfile = (user: Profile, isSelected: boolean, onChange: (value: any | null) => void) => {
@@ -255,59 +356,74 @@ export function ResourceForm({
       {/* Header */}
       <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
         <div className="flex items-center space-x-4">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-10 w-10 text-gray-400 hover:text-gray-600"
-            onClick={onToggleFullScreen}
-            aria-label={isFullScreen ? "Exit full screen" : "Enter full screen"}
-          >
-            <Maximize2 className="h-6 w-6" />
-          </Button>
+          <Tooltip content={isFullScreen ? "Ieși din ecran complet" : "Ecran complet"}>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-10 w-10 text-gray-400 hover:text-gray-600"
+              onClick={onToggleFullScreen}
+              aria-label={isFullScreen ? "Exit full screen" : "Enter full screen"}
+            >
+              <Maximize2 className="h-6 w-6" />
+            </Button>
+          </Tooltip>
           <h2 className="text-lg font-medium text-gray-900">
             {isEditModeLocal ? "Editare resursă educațională" : "Resursă educațională nouă"}
           </h2>
         </div>
         <div className="flex items-center space-x-4">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-10 w-10 text-gray-400 hover:text-gray-600"
-            onClick={form.handleSubmit(onSubmit)}
-            aria-label={isEditModeLocal ? "Actualizați" : "Salvează"}
-          >
-            <Save className="h-6 w-6" />
-          </Button>
-          {isEditModeLocal && resource?.id && (
+          <Tooltip content={isEditModeLocal ? "Actualizează resursa" : "Salvează resursa"}>
             <Button
               variant="ghost"
               size="sm"
               className="h-10 w-10 text-gray-400 hover:text-gray-600"
-              onClick={() => { onDelete && onDelete(resource.id); }}
-              aria-label="Șterge resursa"
+              onClick={handleSave}
+              aria-label={isEditModeLocal ? "Actualizați" : "Salvează"}
             >
-              <Trash2 className="h-6 w-6" />
+              <Save className="h-6 w-6" />
             </Button>
+          </Tooltip>
+          {isEditModeLocal && resource?.id && (
+            <Tooltip content="Șterge resursa">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-10 w-10 text-gray-400 hover:text-gray-600"
+                onClick={() => { onDelete && onDelete(resource.id); }}
+                aria-label="Șterge resursa"
+              >
+                <Trash2 className="h-6 w-6" />
+              </Button>
+            </Tooltip>
           )}
-          <div className="w-px h-6 bg-gray-300"></div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-10 w-10 text-gray-400 hover:text-gray-600"
-            onClick={onBack || onClose}
-            aria-label="Înapoi"
-          >
-            <ArrowLeft className="h-6 w-6" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-10 w-10 text-gray-400 hover:text-gray-600"
-            onClick={onClose}
-            aria-label="Închide"
-          >
-            <X className="h-6 w-6" />
-          </Button>
+          {isEditModeLocal && resource?.id && (
+            <>
+              <div className="w-px h-6 bg-gray-300"></div>
+
+              <Tooltip content="Înapoi">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-10 w-10 text-gray-400 hover:text-gray-600"
+                  onClick={onBack || onClose}
+                  aria-label="Înapoi"
+                >
+                  <ArrowLeft className="h-6 w-6" />
+                </Button>
+              </Tooltip>
+            </>
+          )}
+          <Tooltip content="Închide formularul">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-10 w-10 text-gray-400 hover:text-gray-600"
+              onClick={onClose}
+              aria-label="Închide"
+            >
+              <X className="h-6 w-6" />
+            </Button>
+          </Tooltip>
         </div>
       </div>
 
@@ -328,40 +444,13 @@ export function ResourceForm({
                     placeholder="Resursă Nouă"
                     disabled={isModeratorMode}
                   />
-                  <FormMessage />
+                  <FormMessage className="text-red-600" />
                 </div>
               )}
             />
 
             {/* Form Fields with labels on the left */}
             <div className="space-y-4">
-              {/* Disciplina */}
-              <FormField
-                control={form.control}
-                name="discipline_id"
-                render={({ field }) => (
-                  <FormItem className="grid grid-cols-[150px_1fr] items-center gap-4">
-                    <FormLabel className="text-sm font-medium text-gray-700">
-                      Disciplina
-                      <span className="text-red-500 ml-1">*</span>
-                    </FormLabel>
-                    <FormControl>
-                      <SearchableDropdown
-                        useQueryHook={useDisciplines}
-                        value={field.value}
-                        onChange={field.onChange}
-                        searchColumns={["name"]}
-                        valueField={"id"}
-                        labelField={"name"}
-                        placeholder="Selectează disciplina"
-                        disabled={isModeratorMode}
-                      />
-                    </FormControl>
-                    <FormMessage className="col-start-2" />
-                  </FormItem>
-                )}
-              />
-
               {/* Clasa */}
               <FormField
                 control={form.control}
@@ -370,28 +459,57 @@ export function ResourceForm({
                   <FormItem className="grid grid-cols-[150px_1fr] items-center gap-4">
                     <FormLabel className="text-sm font-medium text-gray-700">
                       Clasa
+                      <span className="text-red-500 ml-1">*</span>
                     </FormLabel>
                     <FormControl>
                       <SearchableDropdown
-                        useQueryHook={useDisciplineClass}
+                        fetchHook={(params) => classesController.getPaginatedData(params)}
+                        filterKey="classes-dropdown"
+                        value={field.value}
+                        onChange={field.onChange}
+                        searchColumns={["name"]}
+                        valueField={"id"}
+                        labelField={"name"}
+                        placeholder="Selectează clasa"
+                        disabled={isModeratorMode}
+                      />
+                    </FormControl>
+                    <FormMessage className="col-start-2 text-red-600" />
+                  </FormItem>
+                )}
+              />
+
+              {/* Disciplina */}
+              <FormField
+                control={form.control}
+                name="discipline_id"
+                render={({ field }) => (
+                  <FormItem className="grid grid-cols-[150px_1fr] items-center gap-4">
+                    <FormLabel className="text-sm font-medium text-gray-700">
+                      Disciplina
+                    </FormLabel>
+                    <FormControl>
+                      <SearchableDropdown
+                        fetchHook={(params) => disciplineClassController.getPaginatedData(params)}
+                        filterKey="discipline-class-dropdown"
                         filters={disciplineClassFilter}
                         value={field.value}
                         onChange={field.onChange}
-                        placeholder="Selectează clasa"
+                        placeholder="Selectează disciplina"
                         // error={form.formState.errors.class_id?.message}
                         // searchPlaceholder="Caută clasa..."
-                        disabled={!form.watch('discipline_id') || isModeratorMode} // Disable until discipline is selected or in moderator mode
-                        searchColumns={["class.name"]}
-                        valueField={"class.id"}
-                        labelField={"class.name"}
+                        disabled={!form.watch('class_id') || isModeratorMode} // Disable until discipline is selected or in moderator mode
+                        searchColumns={["discipline.name"]}
+                        valueField={"discipline.id"}
+                        labelField={"discipline.name"}
                       />
                     </FormControl>
-                    {!form.watch('discipline_id') && (
+                    {!form.watch('class_id') && (
                       <p className="col-start-2 text-sm text-amber-600">
-                        Selectează mai întâi disciplina pentru a vedea clasele disponibile
+                        Selectează mai întâi clasa pentru a vedea disciplinele disponibile
                       </p>
                     )}
-                    <FormMessage className="col-start-2" />
+                    <FormMessage className="col-start-2 text-red-600" />
                   </FormItem>
                 )}
               />
@@ -414,7 +532,7 @@ export function ResourceForm({
                         disabled={true} // Disable the date picker
                       />
                     </FormControl>
-                    <FormMessage className="col-start-2" />
+                    <FormMessage className="col-start-2 text-red-600" />
                   </FormItem>
                 )}
               />
@@ -433,7 +551,7 @@ export function ResourceForm({
                         {statusOptions.find(option => option.value === field.value)?.label || "Ciornă"}
                       </div>
                     </FormControl>
-                    <FormMessage className="col-start-2" />
+                    <FormMessage className="col-start-2 text-red-600" />
                   </FormItem>
                 )}
               />
@@ -449,23 +567,24 @@ export function ResourceForm({
                     </FormLabel>
                     <FormControl>
                       <SearchableDropdown
-                        useQueryHook={useList}
+                        filterKey="mentor-dropdown"
+                        fetchHook={(params) => usersController.getPaginatedData(params)}
                         value={field.value}
                         onChange={field.onChange}
                         valueField="id"
                         labelField="email"
                         placeholder="Selectează mentor"
                         error={form.formState.errors.mentor_id?.message}
-                        searchColumns={[ "first_name", "last_name", "email"]}
+                        searchColumns={["first_name", "last_name", "email"]}
                         filters={formatorFilter}
-                        disabled={isModeratorMode}
+                        disabled={isModeratorMode || isUserEvaluator || isUserStudent}
                         renderItem={(user: any, isSelected: boolean, onChange) => {
                           // Defensive: fallback to empty string for missing fields
                           return renderProfile(user, isSelected, onChange)
                         }}
                       />
                     </FormControl>
-                    <FormMessage className="col-start-2" />
+                    <FormMessage className="col-start-2 text-red-600" />
                   </FormItem>
                 )}
               />
@@ -482,7 +601,8 @@ export function ResourceForm({
                       </FormLabel>
                       <FormControl>
                         <SearchableDropdown
-                          useQueryHook={useList}
+                          filterKey="evaluator-dropdown"
+                          fetchHook={(params) => usersController.getPaginatedData(params)}
                           value={field.value}
                           onChange={field.onChange}
                           valueField="id"
@@ -498,7 +618,7 @@ export function ResourceForm({
                           disabled={!(isUserAdmin || isUserModerator)} // Only enabled for ADMIN and MODERATOR
                         />
                       </FormControl>
-                      <FormMessage className="col-start-2" />
+                      <FormMessage className="col-start-2 text-red-600" />
                     </FormItem>
                   )}
                 />
@@ -509,39 +629,73 @@ export function ResourceForm({
                 <h3 className="text-lg font-medium text-gray-900">Prezentarea resursei educaționale</h3>
               </div>
 
-              {/* Competența specifică */}
-              <FormField
-                control={form.control}
-                name="specific_competency_id"
-                render={({ field }) => {
+              {/* Competențe specifice (multi-select) */}
+              <div className="grid grid-cols-[150px_1fr] items-center gap-4">
+                <label className="text-sm font-medium text-gray-700">
+                  Competențe specifice
+                </label>
+                <div>
+                  <SearchableDropdown
+                    filterKey="specific-competencies-dropdown-2"
+                    fetchHook={(params) => {
+                      console.log('Fetching specific competencies with params:', params);
+                      return specificCompetenciesController.getPaginatedData(params)
+                        .then(result => {
+                          console.log('Specific competencies result:', result);
+                          return result;
+                        })
+                        .catch(error => {
+                          console.error('Error fetching specific competencies:', error);
+                          throw error;
+                        });
+                    }}
+                    value={selectedCompetencies as any}
+                    onChange={(val: any) => {
+                      console.log('Selected competencies changed:', val);
+                      // Ensure we always have an array of valid competencies
+                      const competencies = Array.isArray(val) ? val.filter(Boolean) : [];
+                      setSelectedCompetencies(competencies);
+                    }}
+                    mode="multiple"
+                    placeholder="Selectează competențele"
+                    filters={specificCompetencyFilter}
+                    searchColumns={["name"]}
+                    valueField={"id"}
+                    labelField={"name"}
+                    disabled={!form.watch('class_id') || isModeratorMode}
+                  />
+                  {!form.watch('class_id') && (
+                    <p className="text-sm text-amber-600">
+                      Selectează mai întâi clasa pentru a vedea competențele disponibile
+                    </p>
+                  )}
+                </div>
+              </div>
 
-                  return (
+              {/* Specific Competence Text - only shown when "Alta" is selected */}
+              {selectedCompetencies.some(comp => comp?.id === -1) && (
+                <FormField
+                  control={form.control}
+                  name="specific_competence_text"
+                  render={({ field }) => (
                     <FormItem className="grid grid-cols-[150px_1fr] items-center gap-4">
                       <FormLabel className="text-sm font-medium text-gray-700">
-                        Competența specifică
+                        Specificați competența
+                        <span className="text-red-500 ml-1">*</span>
                       </FormLabel>
                       <FormControl>
-                        <SearchableDropdown
-                          useQueryHook={useSpecificCompetencies}
-                          value={field.value}
-                          onChange={field.onChange}
-                          placeholder="Selectează competența"
-                          filters={specificCompetencyFilter}
-                          searchColumns={["name"]}
-                          // error={form.formState.errors.specific_competency_id?.message}
-                          disabled={!form.watch('class_id') || isModeratorMode} // Disable until class is selected or in moderator mode
-                          valueField={"id"} labelField={"name"} />
+                        <TextArea
+                          {...field}
+                          placeholder="Introduceți detalii despre competența specifică"
+                          disabled={isModeratorMode}
+                          className="min-h-[80px]"
+                        />
                       </FormControl>
-                      {!form.watch('class_id') && (
-                        <p className="col-start-2 text-sm text-amber-600">
-                          Selectează mai întâi clasa pentru a vedea competențele disponibile
-                        </p>
-                      )}
-                      <FormMessage className="col-start-2" />
+                      <FormMessage className="col-start-2 text-red-600" />
                     </FormItem>
-                  );
-                }}
-              />
+                  )}
+                />
+              )}
 
               {/* Durata resursei */}
               <FormField
@@ -562,7 +716,7 @@ export function ResourceForm({
                           disabled={isModeratorMode}
                         />
                       </FormControl>
-                      <FormMessage className="col-start-2" />
+                      <FormMessage className="col-start-2 text-red-600" />
                     </FormItem>
                   );
                 }}
@@ -584,7 +738,7 @@ export function ResourceForm({
                         disabled={isModeratorMode}
                       />
                     </FormControl>
-                    <FormMessage className="col-start-2" />
+                    <FormMessage className="col-start-2 text-red-600" />
                   </FormItem>
                 )}
               />
@@ -606,7 +760,7 @@ export function ResourceForm({
                         disabled={isModeratorMode}
                       />
                     </FormControl>
-                    <FormMessage className="col-start-2" />
+                    <FormMessage className="col-start-2 text-red-600" />
                   </FormItem>
                 )}
               />
@@ -628,7 +782,7 @@ export function ResourceForm({
                         disabled={isModeratorMode}
                       />
                     </FormControl>
-                    <FormMessage />
+                    <FormMessage className="col-start-2 text-red-600" />
                   </FormItem>
                 )}
               />
@@ -658,7 +812,7 @@ export function ResourceForm({
                           disabled={isModeratorMode}
                         />
                       </FormControl>
-                      <FormMessage />
+                      <FormMessage className="col-start-2 text-red-600" />
                     </FormItem>
                   );
                 }}

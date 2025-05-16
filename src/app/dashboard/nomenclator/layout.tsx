@@ -9,41 +9,58 @@ export default function NomenclatorLayout({ children }: { children: ReactNode })
       <SidebarProvider>
         <Sidebar>
           <SidebarSection title="Nomenclatoare">
+
+            <SidebarItem
+              icon={<GraduationCap className="h-4 w-4" />}
+              href="/dashboard/nomenclator/nivele"
+            >
+              Nivele Educaționale
+            </SidebarItem>
+
             <SidebarItem
               icon={<School className="h-4 w-4" />}
               href="/dashboard/nomenclator/clase"
             >
               Clase
             </SidebarItem>
-            <SidebarItem
-              icon={<BookText className="h-4 w-4" />}
-              href="/dashboard/nomenclator/ariicurriculare"
-            >
-              Arii Curriculare
-            </SidebarItem>
-            <SidebarItem
-              icon={<BookMarked className="h-4 w-4" />}
-              href="/dashboard/nomenclator/clase-discipline"
-            >
-              Clase-Discipline
-            </SidebarItem>
-            <SidebarItem
-              icon={<BookOpen className="h-4 w-4" />}
-              href="/dashboard/nomenclator/discipline"
-            >
-              Discipline
-            </SidebarItem>
+
             <SidebarItem
               icon={<Layers className="h-4 w-4" />}
               href="/dashboard/nomenclator/domenii"
             >
               Domenii
             </SidebarItem>
+
             <SidebarItem
-              icon={<GraduationCap className="h-4 w-4" />}
-              href="/dashboard/nomenclator/nivele"
+              icon={<BookOpen className="h-4 w-4" />}
+              href="/dashboard/nomenclator/discipline"
             >
-              Nivele Educaționale
+              Discipline
+            </SidebarItem>
+
+            <SidebarItem
+              icon={<BookMarked className="h-4 w-4" />}
+              href="/dashboard/nomenclator/clase-discipline"
+            >
+              Clase-Discipline
+            </SidebarItem>
+
+
+            {/* <SidebarItem
+              icon={<BookText className="h-4 w-4" />}
+              href="/dashboard/nomenclator/ariicurriculare"
+            >
+              Arii Curriculare
+            </SidebarItem> */}
+        
+           
+            
+
+            <SidebarItem
+              icon={<BookOpen className="h-4 w-4" />}
+              href="/dashboard/nomenclator/competente-specifice"
+            >
+              Competențe Specifice
             </SidebarItem>
           </SidebarSection>
         </Sidebar>

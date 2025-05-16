@@ -2,7 +2,6 @@ import { Webhook } from "standardwebhooks";
 import { EmailProps, sendEmail } from "@/lib/email-service";
 
 const webhook = new Webhook("v1,whsec_mQQxmJ+Fs0T+fZxN7Ilp1M6nrhzrBPJ6RfBVznYq5XtGnx9Y1Oc9xz7NHxxnTvJyv4Z/VYzuJ6vDX7X6".replace("v1,whsec_", ""));
-//new Webhook(process.env.SEND_EMAIL_HOOK_SECRET!.replace("v1,whsec_", ""));
 
 export async function POST(req: Request) {
   const rawBody = await req.text();

@@ -185,7 +185,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
                 // Send password reset email to allow user to set their password
                 const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-                    redirectTo: `${window.location.origin}/sign-up/invite?user_id=${data?.user?.id}`,
+                    redirectTo: `${window.location.origin}/sign-up/forgot-password`,
                 })
 
                 if (resetError) throw resetError

@@ -6,6 +6,8 @@ import type {
   PaginatedResult,
   PaginationParams,
   QueryController,
+  QueryFilter,
+  QuerySort,
   TableNames,
   UsePaginatedHook,
 } from '@/lib/query-controller';
@@ -14,9 +16,20 @@ export function useCrud<T extends TableNames, Map extends ForeignKeyRelationMap<
   controller: QueryController<T, Map>,
   queryKey: string
 ) {
+
   const queryClient = useQueryClient();
 
   type Entity = Awaited<ReturnType<typeof controller['getById']>>;
+
+  const useAll = (params: {
+    filters?: QueryFilter[];
+    sorts?: QuerySort[];
+    limit?: number
+  }) =>
+    useQuery({
+      queryKey: [queryKey, params],
+      queryFn: () => controller.getAll(params),
+    });
 
   const useList: UsePaginatedHook<Entity> = (params?: PaginationParams): UseQueryResult<PaginatedResult<Entity>, Error> =>
     useQuery({
@@ -25,12 +38,17 @@ export function useCrud<T extends TableNames, Map extends ForeignKeyRelationMap<
       placeholderData: (prev) => prev,
     });
 
+
   const useById = (id: Parameters<typeof controller['getById']>[0]) =>
     useQuery({
       queryKey: [queryKey, id],
       queryFn: () => controller.getById(id),
       enabled: !!id,
     });
+
+  const invalidateById = (id: Parameters<typeof controller['getById']>[0]) => {
+    queryClient.invalidateQueries({ queryKey: [queryKey, id] });
+  };
 
   const useFindOneByFilter = (params: Parameters<typeof controller['findOneByFilter']>[0]) =>
     useQuery({
@@ -39,7 +57,7 @@ export function useCrud<T extends TableNames, Map extends ForeignKeyRelationMap<
       enabled: !!params,
     });
 
-  const useCreate = 
+  const useCreate =
     useMutation({
       mutationFn: (record: Parameters<typeof controller['create']>[0]) => controller.create(record),
       onSuccess: () => {
@@ -47,7 +65,7 @@ export function useCrud<T extends TableNames, Map extends ForeignKeyRelationMap<
       },
     });
 
-  const useUpdate = 
+  const useUpdate =
     useMutation({
       mutationFn: ({ id, record }: { id: Parameters<typeof controller['update']>[0]; record: Parameters<typeof controller['update']>[1] }) =>
         controller.update(id, record),
@@ -57,7 +75,7 @@ export function useCrud<T extends TableNames, Map extends ForeignKeyRelationMap<
       },
     });
 
-  const useDelete = 
+  const useDelete =
     useMutation({
       mutationFn: (id: Parameters<NonNullable<typeof controller['delete']>>[0]) => controller.delete?.(id),
       onSuccess: () => {
@@ -65,7 +83,7 @@ export function useCrud<T extends TableNames, Map extends ForeignKeyRelationMap<
       },
     });
 
-  const useDeleteMany = 
+  const useDeleteMany =
     useMutation({
       mutationFn: (filters: Parameters<typeof controller['deleteMany']>[0]) => controller.deleteMany(filters),
       onSuccess: () => {
@@ -73,7 +91,7 @@ export function useCrud<T extends TableNames, Map extends ForeignKeyRelationMap<
       },
     });
 
-  const useRefetch = () =>  {
+  const useRefetch = () => {
     queryClient.invalidateQueries({ queryKey: [queryKey] });
   };
 
@@ -87,7 +105,9 @@ export function useCrud<T extends TableNames, Map extends ForeignKeyRelationMap<
       queryFn: () => controller.getCount(params || {}),
     });
 
+
   return {
+    useAll,
     useList,
     useById,
     useFindOneByFilter,
@@ -98,5 +118,6 @@ export function useCrud<T extends TableNames, Map extends ForeignKeyRelationMap<
     useRefetch,
     useRefetchById,
     useCount,
+    invalidateById,
   };
 }

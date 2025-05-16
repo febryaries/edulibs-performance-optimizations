@@ -485,6 +485,42 @@ export type Database = {
           },
         ]
       }
+      resource_competency: {
+        Row: {
+          competency_id: number
+          created_at: string | null
+          id: number
+          resource_id: string
+        }
+        Insert: {
+          competency_id: number
+          created_at?: string | null
+          id?: number
+          resource_id: string
+        }
+        Update: {
+          competency_id?: number
+          created_at?: string | null
+          id?: number
+          resource_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "resource_competency_competency_id_fkey"
+            columns: ["competency_id"]
+            isOneToOne: false
+            referencedRelation: "specific_competencies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "resource_competency_resource_id_fkey"
+            columns: ["resource_id"]
+            isOneToOne: false
+            referencedRelation: "resources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       resource_evaluations: {
         Row: {
           accessibility_comment: string | null
@@ -639,6 +675,7 @@ export type Database = {
           link: string | null
           mentor_id: string | null
           serial_number: number
+          specific_competence_text: string | null
           specific_competency_id: number | null
           status: Database["public"]["Enums"]["resource_status"] | null
           title: string
@@ -662,6 +699,7 @@ export type Database = {
           link?: string | null
           mentor_id?: string | null
           serial_number?: number
+          specific_competence_text?: string | null
           specific_competency_id?: number | null
           status?: Database["public"]["Enums"]["resource_status"] | null
           title: string
@@ -685,6 +723,7 @@ export type Database = {
           link?: string | null
           mentor_id?: string | null
           serial_number?: number
+          specific_competence_text?: string | null
           specific_competency_id?: number | null
           status?: Database["public"]["Enums"]["resource_status"] | null
           title?: string
@@ -881,6 +920,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      can_access_group: {
+        Args: { group_id_param: string; uid_param: string }
+        Returns: boolean
+      }
       custom_access_token_hook: {
         Args: { event: Json }
         Returns: Json
@@ -893,16 +936,54 @@ export type Database = {
         Args: { uid: string }
         Returns: boolean
       }
+      is_evaluator_of_resource: {
+        Args: { my_uid: string; resource_id_param: string }
+        Returns: boolean
+      }
       is_formator: {
         Args: { uid: string }
+        Returns: boolean
+      }
+      is_group_owned_by_user: {
+        Args: { group_id: string; uid: string }
         Returns: boolean
       }
       is_moderator: {
         Args: { uid: string }
         Returns: boolean
       }
+      is_resource_editable: {
+        Args:
+          | { status: Database["public"]["Enums"]["resource_status"] }
+          | { status: string }
+        Returns: boolean
+      }
+      is_resource_in_formator_group: {
+        Args: { my_uid: string; resource_author_id: string }
+        Returns: boolean
+      }
+      is_resource_in_review: {
+        Args: { resource_id: string }
+        Returns: boolean
+      }
+      is_resource_owned_by_user: {
+        Args: { resource_id: string; uid: string }
+        Returns: boolean
+      }
       is_student: {
         Args: { uid: string }
+        Returns: boolean
+      }
+      is_user_assigned_evaluator: {
+        Args: { resource_id_param: string; uid: string }
+        Returns: boolean
+      }
+      is_user_member_of_group: {
+        Args: { group_id_param: string; uid: string }
+        Returns: boolean
+      }
+      is_user_owned_by_formator: {
+        Args: { my_uid: string; target_uid: string }
         Returns: boolean
       }
     }

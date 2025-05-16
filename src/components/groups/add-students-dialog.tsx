@@ -62,10 +62,6 @@ export function AddStudentsDialog({ open, onOpenChange, groupId }: AddStudentsDi
         },
     })
 
-    useEffect(() => {
-        console.log("[LOG] USERS", form.watch('users'))
-    }, [form.watch('users')])
-
     const onSubmit = (values: StudentsFormValues) => {
         if (!user || !groupId) return
 

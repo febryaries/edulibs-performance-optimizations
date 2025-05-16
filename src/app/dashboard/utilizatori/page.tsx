@@ -14,18 +14,20 @@ import { toast } from "sonner"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { AddBulkUserDialog } from "@/components/users/add-bulk-user-dialog"
 import { useAuth } from "@/lib/auth-context"
+import pLimit from 'p-limit';
 
 export default function UtilizatoriPage() {
   const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>({})
   const [isAddUserDialogOpen, setIsAddUserDialogOpen] = useState(false)
   const [isBulkAddUsersDialogOpen, setIsBulkAddUsersDialogOpen] = useState(false)
+  const userController = useUsersController();
 
   // Use auth context for inviting users
   const { inviteUser } = useAuth()
 
   // Controller configs for dropdowns
   const { useList: useUsers } = useUsersCrud()
-
+  
   // Table filters for DataTable
   const tableFilters: Filter[] = [
     {
@@ -70,24 +72,54 @@ export default function UtilizatoriPage() {
 
   const handleAddUsers = async (users: any[]) => {
     try {
-      // Process each user in the array
-      for (const user of users) {
-        if (!user.email || !user.role) {
-          console.error('Missing email or role for user:', user);
-          continue;
+      let successCount = 0;
+      let existingCount = 0;
+      let errorCount = 0;
+  
+      const validUsers = users.filter(user => user.email && user.role);
+   
+      for(let i = 0; i < validUsers.length; i++) {
+        const user = validUsers[i];
+        try {
+          const existingUser = await userController.findOneByFilter({
+            filters: [{
+              column: "email",
+              operator: "eq",
+              value: user.email
+            }]
+          });
+
+          if (existingUser) {
+            console.log(`User with email ${user.email} already exists`);
+            toast.warning(`Utilizatorul cu email ${user.email} există deja`);
+            existingCount++;
+            continue;
+          }
+          await inviteUser(user.email, user.role);
+          await new Promise(resolve => setTimeout(resolve, 500)); 
+          successCount++;
+        } catch (err) {
+          console.error(`Error processing user ${user.email}:`, err);
+          errorCount++;
         }
-
-        // Invite each user using the auth context function
-        await inviteUser(user.email, user.role);
       }
-
-      toast.success("Utilizatori invitați cu succes");
+  
+      if (successCount > 0) {
+        toast.success(`${successCount} utilizatori invitați cu succes`);
+      }
+      if (existingCount > 0) {
+        toast.info(`${existingCount} utilizatori există deja`);
+      }
+      if (errorCount > 0) {
+        toast.error(`${errorCount} utilizatori nu au putut fi invitați`);
+      }
+  
       setIsBulkAddUsersDialogOpen(false);
     } catch (error) {
       console.error("Error adding users:", error);
       toast.error("Eroare la invitarea utilizatorilor");
     }
-  }
+  };
 
   // Generate a color based on a string
   const getColorFromString = (str: string) => {
@@ -323,6 +355,7 @@ export default function UtilizatoriPage() {
           filters={tableFilters}
           enableRowSelection={true}
           searchColumns={['email', 'first_name', 'last_name']}
+          rowCountText="utilizatori"
           visibleColumnsConfig={{
             initialVisibleColumns: columnVisibility,
             columnDefinitions: [

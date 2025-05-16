@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo } from "react"
 // @ts-ignore
 import { useRouter } from "next/navigation"
+import { BulkUploadResourcesDialog } from "@/components/resources/bulk-upload-resources"
 import { useAuth, isAdmin, isModerator, isEvaluator, isStudent } from "@/lib/auth-context"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -17,7 +18,8 @@ import {
   School,
   BookText,
   Calendar,
-  Tag
+  Tag,
+  Upload
 } from "lucide-react"
 import { DataTable, type Filter } from "@/components/ui/data-table/data-table"
 import { type ColumnDef } from "@tanstack/react-table"
@@ -26,7 +28,21 @@ import { useToast } from "@/components/ui/use-toast"
 import { ResourceFormValues } from "@/schemas/resource-schema"
 import { Database } from "@/utils/database.types"
 import { useRefetchContext } from "@/lib/refetch-context"
-import { Resource, ResourceEvaluation, resourceRelationMap, useClassesCrud, useDisciplinesCrud, useResourcesController, useResourcesCrud, useSpecificCompetenciesCrud } from "@/hooks/use-controllers"
+import {
+  Resource,
+  resourceRelationMap,
+  useClassesCrud,
+  useDisciplinesCrud,
+  useResourcesController,
+  useResourcesCrud,
+  useSpecificCompetenciesCrud,
+  useResourceSpecificCompetenciesCrud,
+  type SpecificCompetency,
+  useResourceSpecificCompetenciesController,
+  useDisciplinesController,
+  useClassesController,
+  useSpecificCompetenciesController
+} from "@/hooks/use-controllers"
 
 // Status options for dropdown
 const statusOptions = [
@@ -56,12 +72,12 @@ export default function DashboardPage() {
   const [currentView, setCurrentView] = useState<'viewer' | 'form' | 'review' | null>(null)
   const [selectedResource, setSelectedResource] = useState<Resource | null>(null)
   const [selectedEvaluationId, setSelectedEvaluationId] = useState<string | null>(null)
-  const [isFullScreen, setIsFullScreen] = useState(false)
+  const [isFullScreen, setIsFullScreen] = useState(true)
   const [isViewerFullScreen, setIsViewerFullScreen] = useState(false)
   const [isEditMode, setIsEditMode] = useState(false)
+  const [isBulkUploadResourcesDialogOpen, setIsBulkUploadResourcesDialogOpen] = useState(false)
 
-  // Supabase client setup for resource operations
-  const supabase = useSupabaseBrowser()
+
 
   // Create stable references for controller configs
   const disciplineControllerConfig = useMemo(() => ({
@@ -99,16 +115,17 @@ export default function DashboardPage() {
   const { toast } = useToast()
 
   // Mutations for resource operations
-  const { 
-    useList: useResources, 
-    useCreate: createResourceMutation, 
-    useUpdate: updateResourceMutation, 
-    useDelete: deleteResourceMutation 
+  const {
+    useList: useResources,
+    useCreate: createResourceMutation,
+    useUpdate: updateResourceMutation,
+    useDelete: deleteResourceMutation,
+    invalidateById: invalidateResourceById
   } = useResourcesCrud()
 
-  const {useList: useDisciplines} = useDisciplinesCrud()
-  const {useList: useClasses} = useClassesCrud()
-  const {useList: useSpecificCompetencies} = useSpecificCompetenciesCrud()
+  const disciplineController = useDisciplinesController();
+  const classController = useClassesController();
+  const competencyController = useSpecificCompetenciesController();
 
   const handleCreateResource = async () => {
     setSelectedResource(null)
@@ -116,8 +133,18 @@ export default function DashboardPage() {
     setCurrentView('form')
   }
 
+  // Get the resource-competency CRUD hooks
+  const {
+    useCreate: useCreateResourceCompetency,
+    useDelete: useDeleteResourceCompetency,
+    useDeleteMany: useDeleteManyResourceCompetencies,
+  } = useResourceSpecificCompetenciesCrud();
+
+  const resourceCompetenciesController = useResourceSpecificCompetenciesController()
+
+
   // Handle resource saving (create or update)
-  const handleSaveResource = async (formData: ResourceFormValues) => {
+  const handleSaveResource = async (formData: any) => {
     try {
       // Show loading toast
       toast({
@@ -125,36 +152,96 @@ export default function DashboardPage() {
         description: "Se salvează resursa...",
       })
 
+      // Extract the selected competencies from the form data
+      const { selectedCompetencies, ...data } = formData as ResourceFormValues & { selectedCompetencies: SpecificCompetency[] };
+
       // Map form data to resource data
       const resourceData = {
-        title: formData.title,
-        discipline_id: formData.discipline_id ? Number(formData.discipline_id) : null,
-        class_id: formData.class_id ? Number(formData.class_id) : null,
-        specific_competency_id: formData.specific_competency_id ? Number(formData.specific_competency_id) : null,
-        status: formData.status as Database["public"]["Enums"]["resource_status"],
-        mentor_id: formData.mentor_id || null,
-        evaluator_id: formData.evaluator_id || null,
-        description: formData.description || null,
-        link: formData.link || null,
-        durata: formData.durata || null,
-        comentarii: formData.comentarii || null,
-        aggregate: formData.aggregate || null,
-      }
+        title: data.title,
+        discipline_id: data.discipline_id ? Number(data.discipline_id) : null,
+        class_id: data.class_id ? Number(data.class_id) : null,
+        status: data.status as Database["public"]["Enums"]["resource_status"],
+        mentor_id: data.mentor_id || null,
+        evaluator_id: data.evaluator_id || null,
+        description: data.description || null,
+        specific_competence_text: data.specific_competence_text || null,
+        link: data.link || null,
+        durata: data.durata || null,
+        comentarii: data.comentarii || null,
+        aggregate: data.aggregate || null,
+      };
+
+      // Variable to store the resource ID for competency links
+      let resourceId: string | null = null;
 
       // If we're editing an existing resource, update it
       if (selectedResource && isEditMode) {
         await updateResourceMutation.mutateAsync({
           id: selectedResource.id,
           record: resourceData,
-        })
+        });
+        resourceId = selectedResource.id;
       } else {
         // Otherwise create a new resource
-        await createResourceMutation.mutateAsync({
+        const newResource = await createResourceMutation.mutateAsync({
           ...resourceData,
           user_id: user?.id || "",
           author_id: user?.id || null,
           is_public: false,
-        })
+        });
+        resourceId = newResource?.id || null;
+      }
+
+      // Handle resource-competency relationships if we have a valid resource ID
+      if (resourceId && selectedCompetencies) {
+        // Get current resource-competency links
+        const currentLinks = await resourceCompetenciesController.getAll({
+          filters: [
+            { column: 'resource_id', operator: 'eq', value: resourceId },
+          ]
+        });
+
+        // Extract the IDs from current links and selected competencies
+        const currentCompetencyIds = Array.isArray(currentLinks) ? currentLinks
+          .map((link) => link?.competency_id) : [];
+
+        const selectedCompetencyIds = Array.isArray(selectedCompetencies) ? selectedCompetencies
+          .map((comp) => comp?.id) : [];
+
+
+        // Safely filter links to delete - those whose competency IDs are not in the selected list
+        const toDelete = currentLinks.filter(link => {
+          const linkCompId = link?.competency_id;
+          return linkCompId !== undefined && !selectedCompetencyIds.includes(linkCompId);
+        });
+
+        // Safely filter competencies to add - those whose IDs are not in the current links
+        const toAdd = selectedCompetencies.filter(comp => {
+          const compId = comp?.id;
+          return compId !== undefined && !currentCompetencyIds.includes(compId);
+        });
+
+        // Create new links for newly selected competencies
+        for (const competencyId of selectedCompetencyIds) {
+          if (competencyId && !currentCompetencyIds.includes(competencyId)) {
+            await useCreateResourceCompetency.mutateAsync({
+              resource_id: resourceId,
+              competency_id: competencyId,
+            });
+          }
+        }
+
+        // Delete links for deselected competencies
+        if (Array.isArray(currentLinks)) {
+          for (const link of currentLinks) {
+            if (link && typeof link.competency_id === 'number' && !selectedCompetencyIds.includes(link.competency_id)) {
+              await useDeleteResourceCompetency.mutateAsync(link.id);
+            }
+          }
+        }
+
+        invalidateResourceById(resourceId)
+
       }
 
       // Trigger refetch to update the data table
@@ -194,6 +281,12 @@ export default function DashboardPage() {
       })
 
       // Delete the resource
+      await useDeleteManyResourceCompetencies.mutateAsync(
+        [
+          { column: 'resource_id', operator: 'eq', value: id },
+        ]
+      )
+
       await deleteResourceMutation.mutateAsync(String(id))
 
       // Trigger refetch to update the data table
@@ -243,7 +336,7 @@ export default function DashboardPage() {
       icon: <BookOpen className="h-4 w-4 text-gray-400" />,
       queryColumn: "discipline_id",
       controller: disciplineControllerConfig,
-      controllerHook: useDisciplines
+      fetchHook: (params) => disciplineController.getPaginatedData(params),
     },
     {
       id: "class_id", // Use the actual database column name as the filter ID
@@ -252,16 +345,16 @@ export default function DashboardPage() {
       icon: <School className="h-4 w-4 text-gray-400" />,
       queryColumn: "class_id",
       controller: classControllerConfig,
-      controllerHook: useClasses
+      fetchHook: (params) => classController.getPaginatedData(params)
     },
     {
       id: "specific_competency_id", // Use the actual database column name as the filter ID
-      label: "Competența specifică",
+      label: "Competențe specifice",
       type: "controller",
       icon: <BookText className="h-4 w-4 text-gray-400" />,
       queryColumn: "specific_competency_id",
       controller: competencyControllerConfig,
-      controllerHook: useSpecificCompetencies
+      fetchHook: (params) => competencyController.getPaginatedData(params)
     },
     {
       id: "created_at", // Use the actual database column name as the filter ID
@@ -329,15 +422,29 @@ export default function DashboardPage() {
       cell: ({ row }) => <div className="font-medium text-blue-600">{row.getValue("title")}</div>,
     },
     {
+      accessorKey: "education_level.name",
+      header: "Nivel de educație",
+    },
+    {
       accessorKey: "discipline.name",
       header: "Disciplină",
     },
     {
-      accessorKey: "specific_competency.name",
-      header: "Competența specifică",
+      accessorKey: "specific_competencies.competency.name",
+      header: "Competențe specifice",
       cell: ({ row }) => {
-        const competency = row.original?.specific_competency;
-        return competency ? competency?.name : "";
+        const competencies = row.original?.specific_competencies;
+        return <>
+          {Array.isArray(competencies) && competencies.length > 0 && (
+            <div className="space-y-2 mt-2">
+              {competencies.map((item: any) => (
+                <div key={item.id} className="bg-gray-50 p-2 rounded-md">
+                  {item.competency?.number ? item.competency?.number + " " + item.competency?.name : "N/A"}
+                </div>
+              ))}
+            </div>
+          )}
+        </>
       },
     },
     {
@@ -345,12 +452,12 @@ export default function DashboardPage() {
       header: "Autor",
       cell: ({ row }) => {
         const user = row.original?.author;
-        
+
         if (!user) {
           return (
             <div className="flex items-center gap-2">
-              <Avatar 
-                size="32" 
+              <Avatar
+                size="32"
                 variant="empty"
                 alt="Ne asignat"
               />
@@ -358,18 +465,18 @@ export default function DashboardPage() {
             </div>
           );
         }
-        
-        const initials = `${user.first_name?.[0] || ''}${user.last_name?.[0] || ''}`;
+
+        const initials = `${user?.first_name?.[0] || ''}${user?.last_name?.[0] || ''}`;
         return (
           <div className="flex items-center gap-2">
-            <Avatar 
-              size="32" 
-              variant={user.avatar_url ? "populated" : "01"}
+            <Avatar
+              size="32"
+              variant={user?.avatar_url ? "populated" : "01"}
               initials={initials}
-              src={user.avatar_url || undefined}
-              alt={`${user.first_name} ${user.last_name}`}
+              src={user?.avatar_url || undefined}
+              alt={`${user?.first_name} ${user?.last_name}`}
             />
-            <span>{`${user.first_name || ''} ${user.last_name || ''}`}</span>
+            <span>{`${user?.first_name || ''} ${user?.last_name || ''}`}</span>
           </div>
         );
       },
@@ -379,12 +486,12 @@ export default function DashboardPage() {
       header: "Evaluator",
       cell: ({ row }) => {
         const evaluator = row.original?.evaluator;
-        
+
         if (!evaluator) {
           return (
             <div className="flex items-center gap-2">
-              <Avatar 
-                size="32" 
+              <Avatar
+                size="32"
                 variant="empty"
                 alt="Ne asignat"
               />
@@ -392,12 +499,12 @@ export default function DashboardPage() {
             </div>
           );
         }
-        
+
         const initials = `${evaluator.first_name?.[0] || ''}${evaluator.last_name?.[0] || ''}`;
         return (
           <div className="flex items-center gap-2">
-            <Avatar 
-              size="32" 
+            <Avatar
+              size="32"
               variant={evaluator.avatar_url ? "populated" : "01"}
               initials={initials}
               src={evaluator.avatar_url || undefined}
@@ -479,12 +586,23 @@ export default function DashboardPage() {
     <div className="container mx-auto px-6 py-6">
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">Resurse educaționale</h1>
-        {user && (isStudent(user) || isAdmin(user)) && (
-          <Button className="bg-blue-600 hover:bg-blue-700 text-white" onClick={handleCreateResource}>
-            <Plus className="mr-1.5 h-4 w-4" />
-            Adaugă resursă
-          </Button>
-        )}
+        <div className="flex gap-2">
+          {/* {user && isAdmin(user) && (
+            <Button
+              className="bg-green-600 hover:bg-green-700 text-white"
+              onClick={() => setIsBulkUploadResourcesDialogOpen(true)}
+            >
+              <Upload className="mr-1.5 h-4 w-4" />
+              Încărcare bulk
+            </Button>
+          )} */}
+          {user && (isStudent(user) || isAdmin(user)) && (
+            <Button className="bg-blue-600 hover:bg-blue-700 text-white" onClick={handleCreateResource}>
+              <Plus className="mr-1.5 h-4 w-4" />
+              Adaugă resursă
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Use the DataTable component with useResources hook */}
@@ -547,6 +665,12 @@ export default function DashboardPage() {
           )}
         </SheetContent>
       </Sheet>
+
+      {/* Bulk Upload Resources Dialog */}
+      <BulkUploadResourcesDialog
+        open={isBulkUploadResourcesDialogOpen}
+        onOpenChange={setIsBulkUploadResourcesDialogOpen}
+      />
     </div>
   )
 }

@@ -2,15 +2,15 @@ import { z } from "zod"
 
 export const gen3Schema = z.object({
   serial_number: z.number().optional(),
-  title: z.string().min(3, { message: "Titlul trebuie să conțină cel puțin 3 caractere" }),
-  discipline: z.string().min(3, { message: "Disciplina trebuie să conțină cel puțin 3 caractere" }),
-  class: z.string().min(3, { message: "Clasa trebuie să conțină cel puțin 3 caractere" }),
-  author: z.string().min(3, { message: "Formatorul trebuie să conțină cel puțin 3 caractere" }),
-  duration: z.string(),
-  description: z.string().min(3, { message: "Descrierea trebuie să conțină cel puțin 3 caractere" }),
-  comments: z.string().min(3, { message: "Comentariile trebuie să conțină cel puțin 3 caractere" }),
+  title: z.string().optional(),
+  discipline: z.string().optional(),
+  class: z.string().optional(),
+  author: z.string().optional(),
+  duration: z.string().optional(),
+  description: z.string().optional(),
+  comments: z.string().optional(),
   today: z.date().optional(),
-  competency: z.string().min(3, { message: "Competența trebuie să conțină cel puțin 3 caractere" }),
+  competency: z.string().optional(),
   aggregate: z.string().optional(),
 })
 

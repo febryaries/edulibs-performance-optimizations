@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { useToast } from "@/components/ui/use-toast"
 import { createClient } from "@/utils/supabase/client"
 import { SearchableDropdown } from "@/components/ui/searchable-dropdown"
-import { useEducationLevelsCrud } from "@/hooks/use-controllers"
+import { useEducationLevelsController, useEducationLevelsCrud } from "@/hooks/use-controllers"
 import { FormField, FormItem, FormLabel, FormControl, FormMessage, Form } from "@/components/ui/form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
@@ -30,7 +30,8 @@ export default function CompleteProfilePage() {
   const router = useRouter()
   const { toast } = useToast()
   const supabase = createClient()
-  const { useList: useEducationalLevels } = useEducationLevelsCrud()
+  // const { useList: useEducationalLevels } = useEducationLevelsCrud()
+  const eductactionLevelsController = useEducationLevelsController();
 
   // Initialize form with default values
   const form = useForm<ProfileFormValues>({
@@ -160,7 +161,8 @@ export default function CompleteProfilePage() {
                   <FormLabel>Nivel de educație</FormLabel>
                   <FormControl>
                     <SearchableDropdown
-                      useQueryHook={useEducationalLevels}
+                      fetchHook={(params) => eductactionLevelsController.getPaginatedData(params)}
+                      filterKey="education-levels-infinite"
                       value={field.value}
                       onChange={field.onChange}
                       searchColumns={["name"]}

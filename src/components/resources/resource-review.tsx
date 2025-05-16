@@ -12,9 +12,8 @@ import { Select } from "@/components/ui/select"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Avatar } from "@/components/ui/avatar"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Database } from "../../utils/database.types"
-import { ResourceEvaluation, ResourceEvaluationInsert, useResourceEvaluationsCrud, useResourcesCrud } from "@/hooks/use-controllers"
+import { ResourceEvaluationInsert, useResourceEvaluationsCrud, useResourcesCrud, useResourceSpecificCompetenciesCrud } from '@/hooks/use-controllers'
 import { useEffect } from "react"
 import { useAnexa3, useAnexa6 } from "@/hooks/use-anexe"
 
@@ -38,16 +37,30 @@ export function ResourceReview({
 
   const { useById: useResourceById, useUpdate: useUpdateResourceEvaluation } = useResourcesCrud();
   const { useById: useResourceEvaluationById, useUpdate: updateEvaluation } = useResourceEvaluationsCrud();
+  const { useAll: useResourceCompetencies } = useResourceSpecificCompetenciesCrud();
 
   // Use the anexa hooks
   const { isGenerating: isGeneratingAnexa3, generateDocument: generateAnexa3Document } = useAnexa3();
   const { isGenerating: isGeneratingAnexa6, generateDocument: generateAnexa6Document } = useAnexa6();
 
   const { data: resource } = useResourceById(resourceProp.id);
-  const { data: evaluation } = useResourceEvaluationById(evaluationId)
+  const { data: evaluation } = useResourceEvaluationById(evaluationId);
+  const { data: resourceCompetencies } = useResourceCompetencies({ filters: [{ column: 'resource_id', operator: 'eq', value: resourceProp.id }] });
 
   const { user } = useAuth();
   const isEvaluator = (user?.user_metadata.role === "EVALUATOR" && user?.id === evaluation?.evaluator_id) || user?.user_metadata.role === "ADMINISTRATOR";
+
+  // Helper function to get competency text
+  const getCompetencyText = (): string => {
+    // Check if we have competencies from the link table
+    if (Array.isArray(resourceCompetencies) && resourceCompetencies.length > 0) {
+      return resourceCompetencies
+        .map((item: any) => item.competency?.name || "N/A")
+        .join(", ");
+    }
+    
+    return '';
+  };
 
   // Helper function to ensure status is always valid
   function getSafeStatus(status: unknown): "CONFORMABLE" | "UNCONFORMABLE" | "IN_PROGRESS" {
@@ -121,11 +134,13 @@ export function ResourceReview({
   // Handle document generation and download
   const handleGenerateDocument = async () => {
     // Map resource data to gen3Schema format
+
+    console.log("[LOG] resource:", resource);
     const documentData = {
       serial_number: resource?.serial_number || 0,
       title: resource?.title || "",
       discipline: resource?.discipline?.name || "",
-      competency: resource?.specific_competency?.name || "",
+      competency: getCompetencyText(),
       class: resource?.class?.name || "",
       author: `${resource?.author?.first_name || ""} ${resource?.author?.last_name || ""}`,
       duration: resource?.durata || "",
@@ -158,7 +173,7 @@ export function ResourceReview({
       discipline: resource?.discipline?.name || "",
       curricular_area: "", // This field doesn't exist on resource, using empty string
       domain: "", // This field doesn't exist on resource, using empty string
-      specific_competency: resource?.specific_competency?.name || "",
+      competency: getCompetencyText(),
       concordance_comment_yes: typeof evaluation?.concordance_ok === 'boolean' && evaluation.concordance_ok ? (evaluation.concordance_comment || "") : "",
       concordance_comment_no: typeof evaluation?.concordance_ok === 'boolean' && !evaluation.concordance_ok ? (evaluation.concordance_comment || "") : "",
       relevance_comment_yes: typeof evaluation?.relevance_ok === 'boolean' && evaluation.relevance_ok ? (evaluation.relevance_comment || "") : "",
@@ -327,8 +342,26 @@ export function ResourceReview({
 
               {/* Competența specifică */}
               <div>
-                <div className="text-sm font-medium text-gray-500 mb-1">Competența specifică</div>
-                <div className="mb-2">{resource?.specific_competency?.name || "N/A"}</div>
+                <div className="text-sm font-medium text-gray-500 mb-1">Competențe specifice</div>
+                <div className="mb-2">
+                  {/* Display competencies using the helper function */}
+                  {resourceCompetencies?.length == 0 && (
+                    <div className="mb-2">
+                      N/A
+                    </div>
+                  )}
+                  
+                  {/* Display competencies from the link table in detail */}
+                  {Array.isArray(resourceCompetencies) && resourceCompetencies.length > 0 && (
+                    <div className="space-y-2 mt-2">
+                      {resourceCompetencies.map((item: any) => (
+                        <div key={item.id} className="bg-gray-50 p-2 rounded-md">
+                          {item.competency?.name || "N/A"}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <Textarea 
                   placeholder="Adaugă comentariu la competență..." 
                   className="min-h-[60px] mb-4" 
