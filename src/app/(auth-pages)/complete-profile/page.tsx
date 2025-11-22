@@ -57,7 +57,8 @@ export default function CompleteProfilePage() {
       // Otherwise, check the session directly
       const { data } = await supabase.auth.getSession()
       if (!data.session) {
-        router.push("/sign-in")
+        // Redirect to forgot-password with error message about expired token
+        router.push("/forgot-password?info=expired_token")
       }
     }
 

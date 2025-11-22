@@ -3,12 +3,14 @@
 import { useState, useEffect, createContext, useContext, ReactNode } from "react"
 import { useSupabaseBrowser } from "@/utils/supabase/client"
 import { type User, type Session } from "@supabase/supabase-js"
-import { Profile, ProfileInsert, ProfileUpdate, useUsersCrud } from "@/hooks/use-controllers"
-import { adminSignUpAction, deleteUserAction, forgotPasswordAction } from "./auth-actions"
-import { UserRole, UserStatus } from "./auth-context-old"
+import { Profile, ProfileInsert, ProfileUpdate, useUsersController, useUsersCrud } from "@/hooks/use-controllers"
+import { adminSignUpAction, deleteUserAction, forgotPasswordAction, inviteUserAction } from "./auth-actions"
 import { toast } from "@/components/ui/use-toast"
+import { Database } from "@/utils/database.types"
 
 
+type UserStatus = Database["public"]["Enums"]["user_status"]
+type UserRole = Database["public"]["Enums"]["user_role"]
 
 type AuthContextType = {
     session: Session | null
@@ -37,33 +39,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [isInitialized, setIsInitialized] = useState(false)
 
     const { useById, useCreate, useUpdate, useDelete } = useUsersCrud()
+    const usersController = useUsersController();
     const createUserMutation = useCreate
     const updateUserMutation = useUpdate
     const deleteUserMutation = useDelete
 
     const { data: profile } = useById(session?.user?.id || "") as { data: Profile | null };
 
+    const [role, setRole ] = useState<UserRole | null>(null)
+
     const initializeAuth = async () => {
+        let _role = null;
         try {
             const { data } = await supabase.auth.getSession()
-            setSession(data.session || null)
-            setUser(data.session?.user || null)
+
+            let _session = data.session;
+            if(_session?.user?.user_metadata){
+                const profileResponse = await usersController.getById(_session.user.id);
+                _session!.user!.user_metadata['role'] = profileResponse?.role || 'STUDENT'
+                _role = profileResponse?.role || 'STUDENT'
+            }
+
+            setSession(_session || null)
+            setUser(_session?.user || null)
         } catch (error) {
             console.error("Error getting session:", error)
         } finally {
             setIsLoading(false)
             setIsInitialized(true)
         }
+        return _role;
     }
 
     useEffect(() => {
-        initializeAuth()
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-            setSession(session || null)
-            setUser(session?.user || null)
+        let sub: any;
+        initializeAuth().then((role) => {
+            const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+                sub = subscription;
+
+                let _session = session;
+                if(_session?.user?.user_metadata){
+                    _session!.user!.user_metadata['role'] = role || 'STUDENT'
+                }
+                setSession(_session || null)
+                setUser(_session?.user || null)
+            })
+        }).catch((err) => {
+            console.error(err);
         })
         return () => {
-            subscription?.unsubscribe()
+            sub?.unsubscribe()
         }
     }, [])
 
@@ -118,84 +143,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const inviteUser = async (email: string, role: UserRole) => {
         setIsLoading(true)
         try {
-            // First, check if the user already exists
-            const { data: existingUsers, error: checkError } = await supabase
-                .from('users')
-                .select('id')
-                .eq('email', email)
-                .limit(1)
-
-            if (checkError) throw checkError
-
-            if (existingUsers && existingUsers.length > 0) {
+            console.log("Calling server-side inviteUserAction for", email, "with role", role)
+            
+            // Create a FormData object to pass to the server action
+            const formData = new FormData()
+            formData.append("email", email)
+            formData.append("role", role)
+            
+            // Call the server-side action
+            const result = await inviteUserAction(formData)
+            
+            if (!result.success) {
                 toast({
-                    title: "Utilizator existent",
-                    description: "Există deja un cont cu această adresă de email.",
+                    title: "Eroare",
+                    description: result.error || "A apărut o eroare la invitarea utilizatorului.",
                     variant: "destructive",
                 })
                 return false
             }
-
-            // Generate a random password for the initial account
-            const tempPassword = Math.random().toString(36).slice(2) + Math.random().toString(36).toUpperCase().slice(2)
-
-            // Create the user with Supabase Auth
-            const { data, error } = await supabase.auth.admin.createUser({
-                email,
-                password: tempPassword,
-                email_confirm: false,
-                user_metadata: {
-                    role,
-                }
-            })
-
-            if (error) {
-                // If admin API fails, fallback to regular signup with invitation email
-                const { data: signupData, error: signupError } = await supabase.auth.signUp({
-                    email,
-                    password: tempPassword,
-                    options: {
-                        data: {
-                            role,
-                        },
-                    },
-                })
-
-                if (signupError) throw signupError
-
-                // Insert the user in the users table using the CRUD hook
-                if (signupData.user?.id) {
-                    await createUserMutation.mutateAsync({
-                        id: signupData.user.id,
-                        email,
-                        role,
-                        status: 'INVITED' as UserStatus,
-                    } as ProfileInsert)
-                }
-            } else {
-                // If admin API succeeds, we still need to create the user record using the CRUD hook
-                if (data?.user?.id) {
-                    await createUserMutation.mutateAsync({
-                        id: data.user.id,
-                        email,
-                        role,
-                        status: 'INVITED' as UserStatus,
-                    } as ProfileInsert)
-                }
-
-                // Send password reset email to allow user to set their password
-                const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-                    redirectTo: `${window.location.origin}/sign-up/forgot-password`,
-                })
-
-                if (resetError) throw resetError
-            }
-
+            
             toast({
                 title: "Invitație trimisă",
-                description: "Utilizatorul a fost invitat cu succes.",
+                description: result.message || "Utilizatorul a fost invitat cu succes.",
             })
-
+            
             return true
         } catch (error: any) {
             console.error("Invite error:", error)
@@ -374,6 +345,11 @@ export function isOwner(user: User | null, resource: any) {
 export function isAdmin(user: User | null) {
     if (!user) return false
     return user.user_metadata.role === "ADMINISTRATOR"
+}
+
+export function isFormator(user: User | null) {
+    if (!user) return false
+    return user.user_metadata.role === "FORMATOR"
 }
 
 export function isModerator(user: User | null) {

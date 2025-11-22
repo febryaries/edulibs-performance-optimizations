@@ -112,6 +112,14 @@ export default function SpecificCompetenciesPage() {
     []
   )
 
+  const [disciplines, setDisciplines] = useState<any[]>([])
+
+
+  const handleDisciplineFilterChange = (value: any) => {
+    console.log("Selected discipline:", value)
+    setDisciplines(value)
+  }
+
   // Define filters
   const filters = useMemo<Filter[]>(
     () => [
@@ -122,15 +130,16 @@ export default function SpecificCompetenciesPage() {
         queryColumn: "name",
       },
       {
-        id: "discipline_id",
+        id: "competency.discipline_id",
         label: "Disciplină",
         icon: <BookOpen className="h-4 w-4" />,
         type: "controller",
-        queryColumn: "discipline_id",
+        queryColumn: "competency.discipline_id",
         controller: {
           valueField: "id",
           labelField: "name",
         },
+        customHandle: handleDisciplineFilterChange,
         fetchHook: (params) => disciplinesController.getPaginatedData(params),
       },
       {

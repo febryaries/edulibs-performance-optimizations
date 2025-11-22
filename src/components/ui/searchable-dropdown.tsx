@@ -1,7 +1,6 @@
 "use client"
 
-import type React from "react"
-import { useState, useEffect, useRef, useMemo, useCallback } from "react"
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { Check, Loader2, ChevronsUpDown, Search, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type {
@@ -16,6 +15,7 @@ import type {
 import { InView } from "react-intersection-observer"
 import { useInfiniteDataTable } from "@/hooks/use-infinite-data"
 import { Avatar } from "@/components/ui/avatar"
+import { useDebounce } from "@/hooks/use-debounce"
 
 // --- Helper: getNestedValue ---
 function getNestedValue(obj: any, path: string | number): any {
@@ -39,6 +39,12 @@ export interface SearchableDropdownProps<T extends TableNames, M extends Foreign
    * Accepts either a key of T (flat property) or a dot-notated string for nested properties (e.g. "class.name").
    */
   labelField: string
+  /**
+   * Optional custom render function for the label. If provided, this will be used instead of labelField.
+   * @param item The item to render the label for
+   * @returns React node to render as the label
+   */
+  labelRender?: (item: WithRelations<T, M>) => React.ReactNode
   /**
    * Optional field for avatar url or initials
    */
@@ -82,6 +88,7 @@ export function SearchableDropdown<
   emptyMessage = "No results found.",
   valueField,
   labelField,
+  labelRender,
   avatarField,
   mode = "single",
   onChange,
@@ -124,18 +131,50 @@ export function SearchableDropdown<
 
 
 
+  // Use a ref to track previous filters to avoid unnecessary updates
+  const prevFiltersRef = useRef<QueryFilter[] | undefined>(undefined);
+  
+  // Update filters when they change externally
   useEffect(() => {
-    const _filters: Record<string, any> = {}
-    for (const filter of filters ?? []) {
-      _filters[filter.column] = filter.value
+    // Only update if filters have actually changed
+    const currentFiltersStr = filters ? JSON.stringify(filters) : '';
+    const prevFiltersStr = prevFiltersRef.current ? JSON.stringify(prevFiltersRef.current) : '';
+    
+    if (filters && filters.length > 0 && currentFiltersStr !== prevFiltersStr) {
+      // Pass the filters directly to the hook since it now accepts QueryFilter[]
+      handleFiltersChanged(filters);
+      // Update the ref to the current filters
+      prevFiltersRef.current = filters;
     }
-    handleFiltersChanged(_filters)
-  }, [filters])
+  }, [filters]) // Remove handleFiltersChanged from dependencies
+
 
   // UI State
   const [open, setOpen] = useState(false)
   const [isEndOfListInView, setIsEndOfListInView] = useState(false)
-
+  const [inputValue, setInputValue] = useState(searchTerm)
+  
+  // Track if input was changed by user typing (vs. external updates)
+  const userTypingRef = useRef(false)
+  
+  // Sync inputValue with searchTerm when searchTerm changes externally
+  useEffect(() => {
+    if (!userTypingRef.current) {
+      setInputValue(searchTerm)
+    }
+  }, [searchTerm])
+  
+  // Debounce the search term to avoid excessive API calls
+  const debouncedSearchTerm = useDebounce(inputValue, 300)
+  
+  // Update the search term when the debounced value changes (from user typing)
+  useEffect(() => {
+    if (debouncedSearchTerm !== searchTerm && userTypingRef.current) {
+      setSearchTerm(debouncedSearchTerm)
+      // Reset the typing flag after setting the search term
+      userTypingRef.current = false
+    }
+  }, [debouncedSearchTerm, setSearchTerm, searchTerm])
 
 
   // Fetch more data when scrolling to the end
@@ -161,7 +200,17 @@ export function SearchableDropdown<
     return undefined
   }, [mode, value, results, valueField])
 
-  const displayValue = selectedItem ? String(getNestedValue(selectedItem, labelField)) : ""
+  // Get display value using labelRender if provided, otherwise use labelField
+  const displayValue = selectedItem 
+    ? labelRender 
+      ? (() => {
+          const rendered = labelRender(selectedItem as unknown as WithRelations<T, M>);
+          return React.isValidElement(rendered) 
+            ? "Selected" // If it's a React element, use a generic text
+            : String(rendered);
+        })()
+      : String(getNestedValue(selectedItem, labelField)) 
+    : ""
 
   // For multiple mode, get the selected items
   const selectedItems = mode === "multiple" && Array.isArray(value) ? (value as T[]) : []
@@ -247,13 +296,6 @@ export function SearchableDropdown<
   }, [open, onOpenChange])
 
   const renderResults = useCallback(() => {
-    results.forEach((item, index) => {
-      if (index < 5) {
-        const isSelected = isItemSelected(item);
-        const itemValue = getNestedValue(item, valueField);
-        const itemLabel = getNestedValue(item, labelField);
-      }
-    });
     return results.map((item, index) => {
       const isSelected = isItemSelected(item);
       return (
@@ -282,19 +324,25 @@ export function SearchableDropdown<
                   )}
                 </div>
               )}
-              {String(getNestedValue(item, labelField))}
+              
+              {/* Render the label using labelRender if provided, otherwise use labelField */}
+              <span className="truncate">
+                {labelRender 
+                  ? labelRender(item as WithRelations<T, M>) 
+                  : getNestedValue(item, labelField)
+                }
+              </span>
             </>
           )}
         </div>
-      )
-    })
-  }, [results, searchTerm, query.data, query.isLoading, mode, valueField, labelField, renderItem, isItemSelected, handleItemSelect, onChange])
+      );
+    });
+  }, [results, isItemSelected, renderItem, mode, labelRender]);
 
-
+  // Log data updates for debugging
   useEffect(() => {
-    if(query.data?.data){
-      console.log("[SearchableDropdown] Data updated", query.data.data, results)
-
+    if(query.data && results.length > 0){
+      console.log("[SearchableDropdown] Data updated", results)
     }
   },[query.data, results])
 
@@ -318,7 +366,9 @@ export function SearchableDropdown<
             if (onOpenChange) onOpenChange(!open)
           }}
         >
-          {mode === "single" ? displayValue || placeholder : placeholder}
+          <div className="flex items-center gap-2 overflow-hidden text-ellipsis">
+            {mode === "single" ? displayValue || placeholder : placeholder}
+          </div>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </button>
 
@@ -337,8 +387,11 @@ export function SearchableDropdown<
                 <input
                   type="text"
                   placeholder="Search..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  value={inputValue}
+                  onChange={(e) => {
+                    userTypingRef.current = true;
+                    setInputValue(e.target.value);
+                  }}
                   className="flex-1 h-9 border-0 outline-none focus:ring-0 bg-transparent"
                 />
               </div>
@@ -385,7 +438,12 @@ export function SearchableDropdown<
                       variant={avatarSrc ? "populated" : "empty"}
                     />
                   )}
-                  <span className="text-sm">{label}</span>
+                  <span className="text-sm">
+                    {labelRender 
+                      ? labelRender(item as unknown as WithRelations<T, M>) 
+                      : label
+                    }
+                  </span>
                   <button
                     type="button"
                     onClick={(e) => handleRemoveItem(e, item)}

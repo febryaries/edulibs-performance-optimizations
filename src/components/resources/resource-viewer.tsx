@@ -10,7 +10,7 @@ import { DataTable } from "@/components/ui/data-table/data-table"
 import { type ColumnDef } from "@tanstack/react-table"
 import { isAdmin, isEvaluator, isModerator, isOwner, useAuth } from "@/lib/auth-context"
 import { toast } from "@/components/ui/use-toast";
-import { ResourceEvaluation, useResourceCompetenciesCrud, useResourceEvaluationsController, useResourceEvaluationsCrud, useResourcesCrud, useResourceSpecificCompetenciesCrud } from "@/hooks/use-controllers"
+import { ResourceEvaluation, useResourceCompetenciesCrud, useResourceEvaluationsController, useResourceEvaluationsCrud, useResourcesCrud, useResourceSpecificCompetenciesCrud, useUsersController } from "@/hooks/use-controllers"
 import { PaginationParams, UsePaginatedHook } from "@/lib/query-controller"
 import { useCallback, useMemo, useState } from "react"
 import { useAnexa3, useAnexa6 } from "@/hooks/use-anexe"
@@ -85,20 +85,21 @@ export function ResourceViewer({ resource: resourceProp, onClose, onToggleFullSc
   // const isEvaluator = (user?.user_metadata.role === "EVALUATOR" && user?.id === resource?.evaluator_id) || user?.user_metadata.role === "ADMINISTRATOR";
 
   // Helper function to get competency text from resource
+  // Helper function to get competency text
   const getCompetencyText = (): string => {
-
-    // First check if we have competencies from the link table
+    // Check if we have competencies from the link table
     if (Array.isArray(resourceCompetencies) && resourceCompetencies.length > 0) {
       return resourceCompetencies
-        .map((item: any) => item.competency?.name || "N/A")
+        .map((item: any) => {
+          if(item.competency_id === -1) {
+            return resource?.specific_competence_text || "N/A"
+          }
+          return item.competency?.name || "N/A"
+        })
         .join(", ");
     }
-
-    return '';
     
-    // Fall back to legacy single competency if available
-    // return (resource?.specific_competency?.name || "") + 
-    //   (resource?.specific_competency?.id === -1 && resource?.specific_competence_text ? " " + resource.specific_competence_text : "");
+    return '';
   };
 
   const canSendToReview = (isOwner(user, resource) && ["DRAFT", "UNCONFORMABLE"].includes(String(resource?.status))) || (isAdmin(user) && ["DRAFT", "UNCONFORMABLE"].includes(String(resource?.status)));
@@ -119,8 +120,37 @@ export function ResourceViewer({ resource: resourceProp, onClose, onToggleFullSc
     }
   }
 
-  const handleSendToReview = () => {
+  const usersController = useUsersController()
+
+  const handleSendToReview = async () => {
     updateResource.mutateAsync({ id: resource?.id || '', record: { status: "IN_REVIEW" } });
+    if(resource?.evaluator_id) {
+      console.log("[test] Should get here 2")
+      const evaluator = await usersController.getById(resource?.evaluator_id || '')
+      if(evaluator) {
+        console.log("[test] Should get here 3")
+        // Call /api/notify 
+        const notifyResponse = await fetch('/api/notify', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            resource: {
+              id: resource?.id || '',
+              title: resource?.title || '',
+            },
+            recipients: [
+              {
+                email: evaluator.email,
+                name: evaluator.first_name + " " + evaluator.last_name
+              },
+            ],
+          }),
+        });
+      }
+    }
+
   };
 
   const handleCreateEvaluation = () => {
@@ -484,13 +514,24 @@ export function ResourceViewer({ resource: resourceProp, onClose, onToggleFullSc
                   )}
                   
                   {/* Display competencies from the link table in detail */}
+                  
                   {Array.isArray(resourceCompetencies) && resourceCompetencies.length > 0 && (
                     <div className="space-y-2 mt-2">
-                      {resourceCompetencies.map((item: any) => (
-                        <div key={item.id} className="bg-gray-50 p-2 rounded-md">
-                          {item.competency?.name || "N/A"}
-                        </div>
-                      ))}
+                      {resourceCompetencies.map((item: any) => { 
+                        
+                        if (item.competency?.id === -1 && resource?.specific_competence_text) {
+                          return (
+                            <div key={item.id} className="bg-gray-50 p-2 rounded-md">
+                              {resource?.specific_competence_text}
+                            </div>
+                          )
+                        }
+
+                        return (
+                          <div key={item.id} className="bg-gray-50 p-2 rounded-md">
+                            {item.competency?.name || "N/A"}
+                          </div>
+                        )})}
                     </div>
                   )}
                 </div>

@@ -16,21 +16,22 @@ import { isAdmin, isEvaluator, isModerator, isStudent, useAuth } from "@/lib/aut
 import {
   Resource,
   useResourcesCrud,
-  useDisciplineClassCrud,
-  useSpecificCompetenciesCrud,
-  useUsersCrud,
   Profile,
-  useClassesCrud,
   useGroupMembersController,
   useSpecificCompetenciesController,
+  useGeneralCompetenciesCrud,
+  useGeneralCompetenciesController,
   useClassesController,
   useDisciplineClassController,
   useUsersController,
+  useSpecificCompetenciesCrud,
+  useDisciplinesCrud,
 } from "@/hooks/use-controllers"
 import { QueryFilter } from "@/lib/query-controller"
 import { Avatar } from "../ui/avatar"
 import { AvatarFallback, AvatarImage } from "../ui/avatar-components"
 import type { SpecificCompetency } from "@/hooks/use-controllers";
+import { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle } from "../ui/dialog"
 
 // Mock data for dropdowns
 const statusOptions = [
@@ -91,16 +92,32 @@ export function ResourceForm({
 
   const { useAll: useAllSpecificCompetencies } = useSpecificCompetenciesCrud();
 
+  // Extract competency IDs from the resource's specific_competencies
+  const competencyIds = useMemo(() => {
+    if (!resource?.specific_competencies) return [];
+
+    // Extract the actual competency IDs from the nested structure
+    return resource.specific_competencies.map(sc => sc.competency_id);
+  }, [resource?.specific_competencies]);
+
   const competencies = useAllSpecificCompetencies({
     filters: [
-      { column: 'id', operator: 'in', value: resource?.specific_competencies?.map((c) => c.id) || [] },
+      { column: 'id', operator: 'in', value: competencyIds },
     ]
   });
 
   // Effect to load competencies from resource when in edit mode
   useEffect(() => {
-    if (isEditModeLocal && resource?.specific_competencies) {
-      setSelectedCompetencies(competencies.data || []);
+    if (isEditModeLocal && resource?.specific_competencies && competencies.data) {
+      // Log for debugging
+      console.log('Resource specific competencies:', resource.specific_competencies);
+      console.log('Fetched competencies:', competencies.data);
+
+      // Make sure we're getting the actual competency objects from the fetched data
+      // that match the IDs in the resource's specific_competencies
+      if (competencies.data && competencies.data.length > 0) {
+        setSelectedCompetencies(competencies.data);
+      }
     }
   }, [isEditModeLocal, resource?.specific_competencies, competencies.data]);
 
@@ -113,6 +130,7 @@ export function ResourceForm({
     defaultValues: {
       title: resource?.title || initialData?.title || "Resursă Nouă",
       discipline_id: resource?.discipline_id || initialData?.discipline_id || -1,
+      discipline_text: resource?.discipline_text || initialData?.discipline_text || "",
       class_id: resource?.class_id || initialData?.class_id || -1,
       specific_competence_text: resource?.specific_competence_text || initialData?.specific_competence_text || "",
       created_at: resource?.created_at ? new Date(resource.created_at) : initialData?.created_at || new Date(),
@@ -161,7 +179,9 @@ export function ResourceForm({
       const formData = {
         title: resource.title || "Resursă Nouă",
         discipline_id: resource.discipline_id || -1,
+        discipline_text: resource.discipline_text || "",
         class_id: resource.class_id || -1,
+        specific_competence_text: resource.specific_competence_text || "",
         created_at: resource.created_at ? new Date(resource.created_at) : new Date(),
         status: resource.status || "DRAFT",
         mentor_id: resource.mentor_id || "",
@@ -230,30 +250,93 @@ export function ResourceForm({
     }];
   }, [classId]);
 
+
+  // const competenciesController = useGeneralCompetenciesController();
+  // const { useAll } = useGeneralCompetenciesCrud();
+  // const generalCompetencies = useAll({
+  //   filters: [
+  //     {
+  //       column: 'discipline_id',
+  //       operator: 'eq',
+  //       value: disciplineId
+  //     }
+  //   ]
+  // });
+
+  const { useById: useDisciplineById } = useDisciplinesCrud()
+
+  const discipline = useDisciplineById(disciplineId)
+
+  const normalizeInternalCode = (internalCode: string, classId: number) => {
+
+    if (!internalCode) return "";
+
+    const mapClasToCode = {
+      1: "grmica",
+      2: "grmij",
+      3: "grmare",
+      4: "cl0",
+      5: "cl1",
+      6: "cl2",
+      7: "cl3",
+      8: "cl4",
+      9: "cl5",
+      10: "cl6",
+      11: "cl7",
+      12: "cl8",
+      13: "cl9",
+      14: "cl10",
+      15: "cl11",
+      16: "cl12",
+      17: "cl13",
+      18: "an1",
+      19: "an2",
+      20: "an3",
+    }
+
+    if (!mapClasToCode[classId as keyof typeof mapClasToCode]) return internalCode.toLowerCase().replaceAll(" ", "_");
+
+    return internalCode.toLowerCase().replaceAll(" ", "_") + "_" + mapClasToCode[classId as keyof typeof mapClasToCode]
+  }
+
+  // Memoize the discipline name to prevent unnecessary filter recreation
+  const disciplineName = useMemo(() => discipline?.data?.name || "", [discipline?.data?.name]);
+
+  // Memoize the normalized internal code
+  const internal_code = useMemo(() => normalizeInternalCode(disciplineName, classId), [disciplineName, classId]);
+
+
+
   const specificCompetencyFilter: QueryFilter[] = useMemo(() => {
     if (!classId || !disciplineId) {
       console.log('Missing classId or disciplineId for specificCompetencyFilter', { classId, disciplineId });
       return [];
     }
 
+    console.log("specificCompetencyFilter ", classId, disciplineId, internal_code);
+
     // Create a simpler filter structure that directly filters by class_id and discipline_id
     const filter: QueryFilter[] = [
       {
-        and: [
-          { column: 'class_id', operator: 'eq', value: classId } as QueryFilter,
-          { column: 'discipline_id', operator: 'eq', value: disciplineId } as QueryFilter
+        or: [
+          {
+            column: 'id',
+            operator: 'eq',
+            value: -1
+          },
+          {
+            and: [
+              { column: 'internal_code', 'operator': 'ilike', value: `%${internal_code}%` },
+            ]
+          }
         ]
       } as QueryFilter
     ];
 
     console.log('Generated specificCompetencyFilter:', filter);
     return filter;
-  }, [classId, disciplineId]);
+  }, [classId, disciplineId, internal_code]);
 
-  const { useList: useClasses } = useClassesCrud();
-  const { useList: useDisciplineClass } = useDisciplineClassCrud();
-  const { useList: useSpecificCompetencies } = useSpecificCompetenciesCrud();
-  const { useList } = useUsersCrud();
 
   const [mentorId, setMentorId] = useState<string | null>(null);
 
@@ -267,9 +350,10 @@ export function ResourceForm({
         ];
       }
       // If no mentorId is set, show none
-      return [
-        { column: 'id', operator: 'eq', value: -1 }
-      ];
+      // return [
+      //   { column: 'id', operator: 'eq', value: "" }
+      // ];
+      return [];
     }
     // Otherwise, show all active formators
     return [
@@ -296,6 +380,9 @@ export function ResourceForm({
 
   // Handle form submission - just pass the form data to the parent's onSave
   const onSubmit = async (data: ResourceFormValues) => {
+
+    console.log(selectedCompetencies);
+
     // Include selected competencies in the data passed to onSave
     const enhancedData = {
       ...data,
@@ -350,9 +437,36 @@ export function ResourceForm({
     )
   }
 
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+
+
 
   return (
     <div className="flex flex-col h-full">
+
+      <Dialog open={deleteDialogOpen} onOpenChange={() => { setDeleteDialogOpen(false); }}>
+        <DialogContent className="sm:max-w-md bg-white rounded-md rounded-lg">
+          <DialogHeader>
+            <DialogTitle>Esti sigur ca vrei sa stergi resursa ?</DialogTitle>
+          </DialogHeader>
+          <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => { setDeleteDialogOpen(false); }}
+                >
+                  Anulează
+                </Button>
+                <Button type="submit"
+                  onClick={() => { setDeleteDialogOpen(false); if(resource) { onDelete && onDelete(resource.id) } }}
+                >
+                  {"Șterge" }
+                </Button>
+              </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+
       {/* Header */}
       <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
         <div className="flex items-center space-x-4">
@@ -389,13 +503,14 @@ export function ResourceForm({
                 variant="ghost"
                 size="sm"
                 className="h-10 w-10 text-gray-400 hover:text-gray-600"
-                onClick={() => { onDelete && onDelete(resource.id); }}
+                onClick={() => { setDeleteDialogOpen(true); }}
                 aria-label="Șterge resursa"
               >
                 <Trash2 className="h-6 w-6" />
               </Button>
             </Tooltip>
           )}
+
           {isEditModeLocal && resource?.id && (
             <>
               <div className="w-px h-6 bg-gray-300"></div>
@@ -413,6 +528,7 @@ export function ResourceForm({
               </Tooltip>
             </>
           )}
+
           <Tooltip content="Închide formularul">
             <Button
               variant="ghost"
@@ -513,6 +629,31 @@ export function ResourceForm({
                   </FormItem>
                 )}
               />
+
+              {/* Specific Competence Text - only shown when "Alta" is selected */}
+              {(form.watch('discipline_id') == -1 && form.watch('class_id') != -1) && (
+                <FormField
+                  control={form.control}
+                  name="discipline_text"
+                  render={({ field }) => (
+                    <FormItem className="grid grid-cols-[150px_1fr] items-center gap-4">
+                      <FormLabel className="text-sm font-medium text-gray-700">
+                        Specificați Disciplina
+                        <span className="text-red-500 ml-1">*</span>
+                      </FormLabel>
+                      <FormControl>
+                        <TextArea
+                          {...field}
+                          placeholder="Introduceți detalii despre disciplina"
+                          disabled={isModeratorMode}
+                          className="min-h-[80px]"
+                        />
+                      </FormControl>
+                      <FormMessage className="col-start-2 text-red-600" />
+                    </FormItem>
+                  )}
+                />
+              )}
 
               {/* Data */}
               <FormField
@@ -637,8 +778,8 @@ export function ResourceForm({
                 <div>
                   <SearchableDropdown
                     filterKey="specific-competencies-dropdown-2"
-                    fetchHook={(params) => {
-                      console.log('Fetching specific competencies with params:', params);
+                    fetchHook={useCallback((params) => {
+                      console.log('Fetching specific competencies with params specificCompetencyFilter:', params);
                       return specificCompetenciesController.getPaginatedData(params)
                         .then(result => {
                           console.log('Specific competencies result:', result);
@@ -648,8 +789,11 @@ export function ResourceForm({
                           console.error('Error fetching specific competencies:', error);
                           throw error;
                         });
-                    }}
+                    }, [specificCompetencyFilter])}
                     value={selectedCompetencies as any}
+                    labelRender={(item) => {
+                      return item.number ? item.number + " " + item.name : item.name;
+                    }}
                     onChange={(val: any) => {
                       console.log('Selected competencies changed:', val);
                       // Ensure we always have an array of valid competencies

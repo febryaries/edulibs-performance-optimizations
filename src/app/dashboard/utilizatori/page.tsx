@@ -31,7 +31,7 @@ export default function UtilizatoriPage() {
   // Table filters for DataTable
   const tableFilters: Filter[] = [
     {
-      id: "rol",
+      id: "role",
       label: "Rol",
       type: "select",
       options: [

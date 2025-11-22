@@ -8,6 +8,7 @@ import { useToast } from "@/components/ui/use-toast"
 import { createClient } from "@/utils/supabase/client"
 import { useAuth } from "@/lib/auth-context"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { updateUserStatusAction } from "@/lib/auth-actions"
 
 
 export default function UpdatePasswordPage() {
@@ -48,6 +49,19 @@ export default function UpdatePasswordPage() {
       })
 
       if (error) throw error
+      
+      const { data, error: getUserError } = await supabase.auth.getUser()
+
+      if (getUserError) throw getUserError
+
+      // If we have a user ID, update their status from INVITED to ACTIVE
+      if (data.user && data.user.id) {
+        const result = await updateUserStatusAction(data.user.id)
+        if (!result.success) {
+          console.error("Failed to update user status:", result.error)
+          // Continue anyway, as the password was updated successfully
+        }
+      }
 
       toast({
         title: "Succes",

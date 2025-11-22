@@ -46,9 +46,9 @@ export default function DisciplinePage() {
         cell: ({ row }) => <div>{row.getValue("name")}</div>,
       },
       {
-        accessorKey: "domain.name",
+        accessorKey: "curricular_area.name",
         header: "Domeniu",
-        cell: ({ row }) => <div>{row.original?.domain?.name || "-"}</div>,
+        cell: ({ row }) => <div>{row.original?.curricular_area?.name || "-"}</div>,
       },
       {
         accessorKey: "number",

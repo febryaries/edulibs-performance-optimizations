@@ -3,18 +3,21 @@
 import { Sidebar, SidebarItem, SidebarSection } from "@/components/ui/sidebar"
 import { Users } from "lucide-react"
 import { useInfiniteDataTable } from "@/hooks/use-infinite-data"
-import { useGroupsController, useGroupsCrud } from "@/hooks/use-controllers"
+import { Group, useGroupsController, useGroupsCrud } from "@/hooks/use-controllers"
 import { useMemo, useState, useEffect } from "react"
 import { InView } from "react-intersection-observer"
+
+import { QueryFilter } from "@/lib/query-controller"
 
 interface InfiniteGroupsSidebarProps {
   selectedGroup: string | null;
   onSelect: (id: string) => void;
-  filters?: any[];
+  filters?: QueryFilter[];
 }
 
-export default function InfiniteGroupsSidebar({ selectedGroup, onSelect, filters }: InfiniteGroupsSidebarProps) {
+export default function InfiniteGroupsSidebar({ selectedGroup, onSelect, filters, setGroups }: InfiniteGroupsSidebarProps) {
   const pageSize = 300
+  // Ensure filters are properly typed as QueryFilter[]
   const memoizedFilters = useMemo(() => filters || [], [filters])
 
   const groupController = useGroupsController()

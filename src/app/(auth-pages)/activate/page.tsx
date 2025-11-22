@@ -4,16 +4,17 @@ import { useState, FormEvent, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useToast } from "@/components/ui/use-toast"
-import { useAuth } from "@/lib/auth-context"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { Alert } from "@/components/ui/alert"
 import { AlertCircle } from "lucide-react"
 import { Suspense } from 'react'
+import { resendEmailVerificationAction } from "@/lib/auth-actions"
+import { useAuth } from "@/lib/auth-context"
 
 // Loading fallback
-function ResetPasswordFallback() {
+function ActivateAccountFallback() {
   return (
     <div className="space-y-4">
       <div className="h-8 w-full bg-gray-200 animate-pulse rounded"></div>
@@ -24,35 +25,51 @@ function ResetPasswordFallback() {
 }
 
 // Client component that uses useSearchParams
-function ResetPasswordContent() {
+function ActivateAccountContent() {
   const [email, setEmail] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const { isLoading, forgotPassword } = useAuth()
+  const [isEmailReadOnly, setIsEmailReadOnly] = useState(false)
   const { toast } = useToast()
   const searchParams = useSearchParams()
+
+   const { isLoading, forgotPassword } = useAuth()
   
   useEffect(() => {
     // Check for error query parameter
-    const info = searchParams.get('info')
-    if (info === 'expired_token') {
-      setErrorMessage('Link-ul de resetare a expirat sau nu este valid. Te rugăm să soliciți un nou link de resetare a parolei.')
+    const error = searchParams.get('error')
+    if (error) {
+      setErrorMessage(error)
+    }
+
+    // Check for email query parameter
+    const emailParam = searchParams.get('email')
+    if (emailParam) {
+      setEmail(emailParam)
+      setIsEmailReadOnly(true) // Disable the email input when provided in query params
     }
   }, [searchParams])
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setIsSubmitting(true)
+    
     if (!email) {
       toast({
-        title: "Error",
-        description: "Please enter your email address",
+        title: "Eroare",
+        description: "Te rugăm să introduci adresa de email.",
         variant: "destructive",
       })
+      setIsSubmitting(false)
       return
     }
+    
     try {
-      await forgotPassword(email)
+      const formData = new FormData();
+      formData.append("email", email);
+      // await forgotPassword(email)
+      await resendEmailVerificationAction(formData);
+      setIsSubmitting(false)
     } catch (error) {
       setIsSubmitting(false)
       throw error;
@@ -81,13 +98,16 @@ function ResetPasswordContent() {
               type="email"
               placeholder="Introdu email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => !isEmailReadOnly && setEmail(e.target.value)}
+              readOnly={isEmailReadOnly}
+              disabled={isEmailReadOnly}
+              className={isEmailReadOnly ? "bg-gray-100" : ""}
               required
             />
           </div>
 
-          <Button type="submit" className="w-full" disabled={isSubmitting}>
-            {isLoading ? "Se procesează..." : "Trimite link de resetare"}
+          <Button type="submit" className="w-full" disabled={isSubmitting || isLoading}>
+            {isSubmitting || isLoading ? "Se procesează..." : "Trimite email de activare"}
           </Button>
         </div>
       </form>
@@ -101,17 +121,21 @@ function ResetPasswordContent() {
 }
 
 // Main page component with Suspense boundary
-export default function ResetPasswordPage() {
+export default function ActivatePage() {
   return (
     <Card className="w-full max-w-md">
       <CardHeader className="space-y-1">
-        <CardTitle className="text-2xl font-bold text-center text-gray-900"><span>Resetează parola</span></CardTitle>
+        <CardTitle className="text-2xl font-bold text-center text-gray-900">Activare cont</CardTitle>
+        <CardDescription className="text-center">
+          Contul tău necesită activare. Introdu adresa de email pentru a primi un link de activare.
+        </CardDescription>
       </CardHeader>
       <CardContent>
-        <Suspense fallback={<ResetPasswordFallback />}>
-          <ResetPasswordContent />
+        <Suspense fallback={<ActivateAccountFallback />}>
+          <ActivateAccountContent />
         </Suspense>
       </CardContent>
     </Card>
   )
 }
+

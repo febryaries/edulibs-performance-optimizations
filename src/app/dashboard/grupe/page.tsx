@@ -1,8 +1,11 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
-import { Trash2, Users, BookOpen, Plus, UserPlus, Upload } from "lucide-react";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Trash2, Users, BookOpen, Plus, UserPlus, Upload, UserCircle, Check, ChevronDown } from "lucide-react";
 import { DataTable, type Filter } from "@/components/ui/data-table/data-table"
 import { type ColumnDef } from "@tanstack/react-table"
 import { Avatar } from "@/components/ui/avatar"
@@ -10,35 +13,259 @@ import { format } from "date-fns"
 import { ro } from "date-fns/locale"
 import { SidebarProvider } from "@/components/ui/sidebar"
 import InfiniteGroupsSidebar from "@/components/groups/InfiniteGroupsSidebar"
-import { useAuth } from "@/lib/auth-context"
+import { useAuth, isAdmin, isModerator, isStudent, isEvaluator } from "@/lib/auth-context"
 import { z } from "zod"
-import { GroupMember, useGroupMembersController, useGroupMembersCrud, useGroupsController, useGroupsCrud, useUsersController, useUsersCrud } from "@/hooks/use-controllers"
+import { AvatarFallback, AvatarImage } from "@/components/ui/avatar-components"
+import { SearchableDropdown } from "@/components/ui/searchable-dropdown"
+import { GroupMember, groupMemberRelationMap, useGroupMembersController, useGroupMembersCrud, useGroupsController, useGroupsCrud, useUsersController, useUsersCrud } from "@/hooks/use-controllers"
 import { QueryFilter, UsePaginatedHook } from "@/lib/query-controller"
 import { AddGroupDialog } from "@/components/groups/add-group-dialog"
 import { DeleteGroupDialog } from "@/components/groups/delete-group-dialog"
 import { AddStudentsDialog } from "@/components/groups/add-students-dialog"
 import { BulkUploadGroupsDialog } from "@/components/groups/bulk-upload-group"
 import { BulkUploadMembersDialog } from "@/components/groups/bulk-upload-members"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form"
+import { toast } from "@/components/ui/use-toast"
+import { cn } from "@/lib/utils";
 
 // Define the form schema
 const groupFormSchema = z.object({
   name: z.string().min(1, "Numele grupei este obligatoriu"),
   description: z.string().optional(),
-  users: z.array(z.object({
-    id: z.string(),
-    first_name: z.string().nullable(),
-    last_name: z.string().nullable(),
-    email: z.string().nullable(),
-    avatar_url: z.string().nullable(),
-    role: z.enum(["ADMINISTRATOR", "MODERATOR", "FORMATOR", "EVALUATOR", "STUDENT"]).nullable(),
-    status: z.enum(["ACTIVE", "INACTIVE", "SUSPENDED"]).nullable(),
-    created_at: z.string(),
-    updated_at: z.string(),
-    education_level_id: z.number().nullable(),
-  })).optional(),
+  mentor_id: z.string().optional()
 })
 
 type GroupFormValues = z.infer<typeof groupFormSchema>
+
+// Helper function to render user profiles in dropdowns
+const renderProfile = (user: any, isSelected: boolean, onChange: (value: any | null) => void) => {
+  const firstName = user?.first_name ?? ""
+  const lastName = user?.last_name ?? ""
+  const fullName = [firstName, lastName].filter(Boolean).join(" ") || "Unknown"
+
+  return (
+    <div className="flex items-center gap-3 w-full py-2" onClick={() => onChange(user?.id)}>
+      <Avatar className="h-8 w-8 shrink-0">
+        <AvatarImage src={user?.avatar_url || undefined} />
+        <AvatarFallback>{firstName ? firstName[0]?.toUpperCase() : "U"}{lastName ? lastName[0]?.toUpperCase() : ""}</AvatarFallback>
+      </Avatar>
+      <div className="flex flex-col min-w-0 flex-1">
+        <span className="font-medium text-sm truncate">{fullName}</span>
+        <span className="text-xs text-muted-foreground truncate">{user?.email || "N/A"}</span>
+      </div>
+      {isSelected && <Check className="ml-auto h-4 w-4 text-primary shrink-0" />}
+    </div>
+  )
+}
+
+// Component to edit the group mentor
+interface GroupMentorFormProps {
+  groupId: string;
+  initialMentorId: string;
+}
+
+function GroupMentorForm({ groupId, initialMentorId }: GroupMentorFormProps) {
+  const { user } = useAuth();
+  const isUserAdmin = isAdmin(user);
+  const isUserModerator = isModerator(user);
+  const isUserStudent = isStudent(user);
+  const isUserEvaluator = isEvaluator(user);
+
+  const usersController = useUsersController();
+  const { useUpdate: updateGroup } = useGroupsCrud();
+
+  const { useById: useUserById } = useUsersCrud();
+
+  const { data: initialMentor, isLoading: isLoadingMentor } = useUserById(initialMentorId);
+
+  // State to control the popover
+  const [isOpen, setIsOpen] = useState(false);
+
+  // Filter for mentors/formators
+  const formatorFilter = useMemo<QueryFilter[]>(() => {
+    return [{ column: "role", operator: "eq" as const, value: "FORMATOR" }]
+  }, []);
+
+  // Create form
+  const form = useForm<GroupFormValues>({
+    resolver: zodResolver(groupFormSchema),
+    defaultValues: {
+      name: "",
+      description: "",
+      mentor_id: initialMentorId || "",
+    },
+  });
+
+  // Update form values when initialMentorId changes
+  useEffect(() => {
+    if (initialMentorId) {
+      form.setValue("mentor_id", initialMentorId);
+    }
+  }, [initialMentorId, form]);
+
+  // Handle form submission
+  const onSubmit = async (data: any) => {
+
+    console.log("Group Data", groupId, data);
+
+    if (!groupId || !data.mentor_id) return;
+
+    try {
+      await updateGroup.mutateAsync({
+        id: groupId,
+        record: {
+          created_by: data.mentor_id
+        }
+      });
+
+      // Show success message
+      toast({
+        title: "Mentor actualizat",
+        description: "Mentorul grupei a fost actualizat cu succes.",
+      });
+    } catch (error) {
+      console.error("Error updating group mentor:", error);
+      toast({
+        title: "Eroare",
+        description: "A apărut o eroare la actualizarea mentorului.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Handle mentor selection
+  const handleMentorChange = (mentorId: string) => {
+    console.log("Group Mentor selected", mentorId);
+
+    // Set the value in the form
+    form.setValue("mentor_id", mentorId);
+
+    // Close the popover
+    setIsOpen(false);
+
+    // Directly call onSubmit with the form data
+    onSubmit({ mentor_id: mentorId });
+  };
+
+  if (!groupId) {
+    return null;
+  }
+
+  //   <div
+  //   className={cn(
+  //     "flex items-center rounded-md border bg-white cursor-pointer rounded-radius-04",
+  //     isOpen ? "border-blue-500 ring-2 ring-blue-200" : "border-gray-300",
+  //     className
+  //   )}
+  //   onClick={handleOpenChange}
+  // >
+  //   {icon && <div className="pl-3 text-sm text-gray-600">{icon}</div>}
+  //   <div className="px-3 py-2 text-sm text-gray-700">{label}</div>
+  //   <div className="flex items-center gap-1 border-l border-gray-300 px-3 py-2 text-sm font-medium text-gray-900">
+  //     {getDisplayValue()}
+  //     <ChevronDown className={`h-4 w-4 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+  //   </div>
+  // </div>
+
+  return (
+    <Form {...form}>
+      <div className="flex items-center gap-2 text-sm text-gray-500 pr-4">
+        <FormField
+          control={form.control}
+          name="mentor_id"
+          render={({ field }) => (
+            <FormItem className="flex items-center m-0">
+              <FormControl>
+                <Popover open={isOpen} onOpenChange={setIsOpen}>
+                  <PopoverTrigger asChild>
+                    <div className={cn(
+                      "flex items-center rounded-md border bg-white cursor-pointer rounded-radius-04",
+                      isOpen ? "border-blue-500 ring-2 ring-blue-200" : "border-gray-300"
+                    )}>
+                      {initialMentor ? (
+                        <>
+
+                          <div className="px-3 py-2 text-sm text-gray-700"><span className="text-sm font-medium">Mentor</span></div>
+                          <div className="flex items-center gap-1 border-l border-gray-300 px-3 py-2 text-sm font-medium text-gray-900">
+                            <Avatar className="h-5 w-5 shrink-0">
+                              <AvatarImage src={initialMentor?.avatar_url || undefined} />
+                              <AvatarFallback>
+                                {initialMentor.first_name ? initialMentor.first_name[0]?.toUpperCase() : "M"}
+                                {initialMentor.last_name ? initialMentor.last_name[0]?.toUpperCase() : ""}
+                              </AvatarFallback>
+                            </Avatar>
+                            <span className="text-sm font-medium">
+                              {initialMentor.first_name && initialMentor.last_name ?
+                                `${initialMentor.first_name} ${initialMentor.last_name}` :
+                                initialMentor.email || "Mentor nedefinit"}
+                            </span>
+                            {isUserAdmin && (
+                              <ChevronDown className={`h-4 w-4 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+                            )}
+                          </div>
+                        </>
+                      ) : (
+                        <>
+
+                          <div className="px-3 py-2 text-sm text-gray-700"><span className="text-sm font-medium">Mentor</span></div>
+                          <div className="flex items-center gap-1 border-l border-gray-300 px-3 py-2 text-sm font-medium text-gray-900">
+
+                            <span className="text-sm font-medium">
+                              {isLoadingMentor ? "Se încarcă..." : "Nimic selectat"}
+                            </span>
+                            {isUserAdmin && (
+                              <ChevronDown className={`h-4 w-4 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+                            )}
+                          </div>
+
+
+                        </>
+                      )}
+                    </div>
+                  </PopoverTrigger>
+                  {isUserAdmin && (
+                    <PopoverContent className="w-[320px] p-0" align="start">
+                      <div className="p-2">
+                        <SearchableDropdown
+                          filterKey="mentor-dropdown-group-owner"
+                          fetchHook={(params) => usersController.getPaginatedData(params)}
+                          value={field.value}
+                          onChange={(value) => {
+                            field.onChange(value);
+                            handleMentorChange(value as string);
+                          }}
+                          valueField="id"
+                          labelField="email"
+                          placeholder="Selectează mentor"
+                          error={form.formState.errors.mentor_id?.message}
+                          searchColumns={["first_name", "last_name", "email"]}
+                          filters={formatorFilter}
+                          disabled={isUserModerator || isUserEvaluator || isUserStudent}
+                          renderItem={(user: any, isSelected: boolean, onChange) => {
+                            return renderProfile(user, isSelected, onChange);
+                          }}
+                        />
+                      </div>
+                    </PopoverContent>
+                  )}
+                </Popover>
+              </FormControl>
+            </FormItem>
+          )}
+        />
+      </div>
+    </Form>
+  );
+}
 
 export default function GrupePage() {
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null)
@@ -67,7 +294,7 @@ export default function GrupePage() {
     return []
   }, [profile, user])
 
-  const { data: groupData, isLoading: groupsLoading } = useGroups({ pageSize: 100, filters: groupsFilter })
+  const { data: groupData, isLoading: groupsLoading } = useGroups({ pageSize: 500, filters: groupsFilter })
   const groups = groupData?.data || []
 
   // Fetch users for dynamic query
@@ -244,53 +471,65 @@ export default function GrupePage() {
         <div className="flex-1 overflow-auto p-6">
           {/* Header with title and actions */}
           <div className="flex justify-between items-center mb-6">
-            <h1 className="text-2xl font-bold">
-              {selectedGroup ? groups.find(g => g?.id === selectedGroup)?.name || "Grupe" : "Toate grupele"}
-            </h1>
-            <div className="flex space-x-2">
-              {selectedGroup ? (
-                <>
-                  <Button
-                    variant="outline"
-                    className="flex items-center space-x-1"
-                    onClick={() => setIsAddMemberDialogOpen(true)}
-                  >
-                    <UserPlus className="h-4 w-4 mr-2" />
-                    Adaugă cursant
-                  </Button>
-                  
-                  <Button
-                    variant="outline"
-                    className="flex items-center space-x-1 text-red-500 hover:text-red-600 hover:bg-red-50 border-red-200 hover:border-red-300"
-                    onClick={() => handleDeleteGroup()}
-                  >
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Șterge grupa
-                  </Button>
-                </>
-              ) : (
-                <>
-                <Button
-                  variant="outline"
-                  className="flex items-center space-x-1"
-                  onClick={() => setIsBulkUploadGroupsDialogOpen(true)}
-                >
-                  <Upload className="h-4 w-4 mr-2" />
-                  Adaugă grupe bulk
+            <div className="flex flex-col">
+              <h1 className="text-2xl font-bold">
+                {selectedGroup ? groups.find(g => g?.id === selectedGroup)?.name || "Grupe" : "Toate grupele"}
+              </h1>
+            </div>
+            <div className="flex items-center justify-between">
+              <div>
+                {selectedGroup && (
+                  <GroupMentorForm
+                    groupId={selectedGroup}
+                    initialMentorId={groups.find(g => g?.id === selectedGroup)?.created_by?.id || ""}
+                  />
+                )}
+              </div>
+              <div className="flex space-x-4">
+                {selectedGroup ? (
+                  <>
+                    <Button
+                      variant="outline"
+                      className="flex items-center space-x-1"
+                      onClick={() => setIsAddMemberDialogOpen(true)}
+                    >
+                      <UserPlus className="h-4 w-4 mr-2" />
+                      Adaugă cursant
+                    </Button>
+
+                    <Button
+                      variant="outline"
+                      className="flex items-center space-x-1 text-red-500 hover:text-red-600 hover:bg-red-50 border-red-200 hover:border-red-300"
+                      onClick={() => handleDeleteGroup()}
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Șterge grupa
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      variant="outline"
+                      className="flex items-center space-x-1"
+                      onClick={() => setIsBulkUploadGroupsDialogOpen(true)}
+                    >
+                      <Upload className="h-4 w-4 mr-2" />
+                      Adaugă grupe bulk
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="flex items-center space-x-1"
+                      onClick={() => setIsBulkUploadMembersDialogOpen(true)}
+                    >
+                      <Upload className="h-4 w-4 mr-2" />
+                      Adaugă cursanți bulk
+                    </Button>
+                  </>
+                )}
+                <Button onClick={() => setIsDialogOpen(true)}>
+                  <Plus className="mr-2 h-4 w-4" /> Creează grupă
                 </Button>
-                <Button
-                    variant="outline"
-                    className="flex items-center space-x-1"
-                    onClick={() => setIsBulkUploadMembersDialogOpen(true)}
-                  >
-                    <Upload className="h-4 w-4 mr-2" />
-                    Adaugă cursanți bulk
-                  </Button>
-                </>
-              )}
-              <Button onClick={() => setIsDialogOpen(true)}>
-                <Plus className="mr-2 h-4 w-4" /> Creează grupă
-              </Button>
+              </div>
             </div>
           </div>
           <div className="space-y-4">
@@ -346,6 +585,7 @@ export default function GrupePage() {
         onOpenChange={setIsBulkUploadMembersDialogOpen}
         groupId={selectedGroup ?? ''}
       />
+
     </SidebarProvider>
   )
 }

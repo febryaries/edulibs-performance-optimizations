@@ -56,6 +56,8 @@ export async function sendEmail({
       html,
     });
 
+    console.log('Email sent successfully:', result);
+
     return { success: result.error === null, messageId: result.data?.id };
   } catch (error) {
     console.error('Error sending email:', error);

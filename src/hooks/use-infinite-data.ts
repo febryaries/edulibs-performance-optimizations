@@ -1,17 +1,12 @@
 "use client"
 
-import { useCallback, useMemo, useReducer, useEffect } from "react"
+import { useCallback, useMemo, useReducer } from "react"
 import type {
-  ForeignKeyRelationMap,
-  GetPaginatedDataFn,
   PaginatedResult,
   PaginationParams,
   QueryFilter,
-  TableNames,
-  UsePaginatedHook,
-  WithRelations
 } from "@/lib/query-controller"
-import { useInfiniteQuery, UseInfiniteQueryResult, useQueryClient } from "@tanstack/react-query"
+import { useInfiniteQuery, UseInfiniteQueryResult } from "@tanstack/react-query"
 
 export interface UseInfiniteDataTable<T> {
   pageSize: number
@@ -19,17 +14,19 @@ export interface UseInfiniteDataTable<T> {
   totalPages: number
   state: PaginationParams
   searchTerm: string
-  filters: Record<string, any>
+  filters: QueryFilter[]
+  filtersRecord: Record<string, any> // Added for backward compatibility
   sorting: { id: string; desc: boolean }[]
   query: UseInfiniteQueryResult<PaginatedResult<T>, Error>
   results: T[]
-  
+
   setPageSize: (size: number) => void
   setSearchTerm: (term: string) => void
-  handleFiltersChanged: (filters: Record<string, any>) => void
-  handleFilterChange: (id: string, value: any) => void
+  handleFiltersChanged: (filters: QueryFilter[]) => void
+  handleFilterChange: (column: string, value: any) => void
   handleSortChange: (sorting: { id: string; desc: boolean }[]) => void
-  
+  handleEnable: () => void
+
   goToNextPage: () => void
   goToPreviousPage: () => void
   resetFilters: () => void
@@ -38,7 +35,8 @@ export interface UseInfiniteDataTable<T> {
 export interface DataTableState<T> {
   queryParams: PaginationParams
   pageIndex: number
-  filters: Record<string, any>
+  filtersRecord: Record<string, any> // Renamed from filters to filtersRecord
+  filters: QueryFilter[] // Added QueryFilter[] type
   sorting: { id: string; desc: boolean }[]
   searchTerm: string
   resultsMap: Map<number, T[]>
@@ -56,6 +54,16 @@ function toValidQueryFilters(filters: Record<string, any>): QueryFilter[] {
     }))
 }
 
+// Convert QueryFilter[] to Record<string, any> for backward compatibility
+function toFilterRecord(filters: QueryFilter[]): Record<string, any> {
+  return filters.reduce((acc, filter) => {
+    if (filter.column) {
+      acc[filter.column] = filter.value;
+    }
+    return acc;
+  }, {} as Record<string, any>);
+}
+
 export function useInfiniteDataTable<T>(
   fetchHook: (params: PaginationParams) => Promise<PaginatedResult<T>>,
   initialState: PaginationParams,
@@ -70,11 +78,12 @@ export function useInfiniteDataTable<T>(
     {
       queryParams: initialState,
       pageIndex: 0,
-      filters: {},
+      filtersRecord: initialState.filters ? toFilterRecord(initialState.filters) : {},
+      filters: initialState.filters || [],
       sorting: initialState.sorts?.map(s => ({ id: s.column, desc: s.direction === "desc" })) || [],
       searchTerm: initialState.searchTerm || "",
       resultsMap: new Map(),
-      filterChangeCounter: 0
+      filterChangeCounter: 0,
     }
   )
 
@@ -83,20 +92,22 @@ export function useInfiniteDataTable<T>(
     return {
       ...state.queryParams,
       pageSize: state.queryParams.pageSize,
-      filters: toValidQueryFilters(state.filters),
+      filters: state.filters,
       sorts: state.sorting.map(({ id, desc }) => ({
         column: id,
         direction: desc ? "desc" : "asc"
       })),
       searchTerm: state.searchTerm,
-      cursor // Use cursor when provided
+      cursor, // Use cursor when provided
+      withCount: true,
+      disabled: state.queryParams.disabled
     }
   }, [state.queryParams, state.filters, state.sorting, state.searchTerm])
 
   // Create a queryKey that includes the filterChangeCounter
-  const queryKey = useMemo(() => 
-    [key, state.queryParams.pageSize, state.searchTerm, state.filters, state.sorting, state.filterChangeCounter], 
-    [key, state.queryParams.pageSize, state.searchTerm, state.filters, state.sorting, state.filterChangeCounter]
+  const queryKey = useMemo(() =>
+    [key, state.queryParams.pageSize, state.searchTerm, state.filters, state.sorting, state.filterChangeCounter, state.queryParams.disabled   ],
+    [key, state.queryParams.pageSize, state.searchTerm, state.filters, state.sorting, state.filterChangeCounter, state.queryParams.disabled]
   )
 
   // Set up the infinite query
@@ -116,30 +127,30 @@ export function useInfiniteDataTable<T>(
   // Accumulate results from all pages up to the current page index
   const results = useMemo(() => {
     if (!query.data?.pages) return []
-    
+
     // Update the results map to cache page results
     const updatedMap = new Map(state.resultsMap)
     query.data.pages.forEach((page, index) => {
       updatedMap.set(index, page.data)
     })
-    
+
     // We need to spread to avoid React's object reference equality check
     if (updatedMap.size !== state.resultsMap.size) {
       setState({ resultsMap: updatedMap })
     }
-    
+
     // Accumulate all results from pages 0 up to and including the current page
     let accumulatedResults: T[] = []
-    
+
     // Get all pages up to the current page index
     const pagesToInclude = Math.min(state.pageIndex + 1, query.data.pages.length)
-    
+
     for (let i = 0; i < pagesToInclude; i++) {
       if (query.data.pages[i]?.data) {
         accumulatedResults = [...accumulatedResults, ...query.data.pages[i].data]
       }
     }
-    
+
     return accumulatedResults
   }, [query.data, state.pageIndex, state.resultsMap])
 
@@ -152,7 +163,7 @@ export function useInfiniteDataTable<T>(
   // Reset function to invalidate query when filters change
   const resetQueryData = useCallback(() => {
     // Increment the counter to force a new query
-    setState({ 
+    setState({
       filterChangeCounter: state.filterChangeCounter + 1,
       pageIndex: 0
     })
@@ -160,8 +171,8 @@ export function useInfiniteDataTable<T>(
 
   // Handler for changing page size
   const setPageSize = (size: number) => {
-    setState({ 
-      queryParams: { ...state.queryParams, pageSize: size } 
+    setState({
+      queryParams: { ...state.queryParams, pageSize: size }
     })
     resetQueryData()
   }
@@ -176,25 +187,51 @@ export function useInfiniteDataTable<T>(
   }
 
   // Handler for changing a single filter
-  const handleFilterChange = (id: string, value: any) => {
-    const filters = { ...state.filters, [id]: value }
+  const handleFilterChange = (column: string, value: any) => {
+    // Create a new filter for this column
+    const newFilter: QueryFilter = { column, operator: 'eq', value }
+
+    // Update the filters array by replacing any existing filter with the same column
+    const updatedFilters = state.filters.filter(f => f.column !== column)
+    updatedFilters.push(newFilter)
+
+    // Update the filtersRecord for backward compatibility
+    const filtersRecord = { ...state.filtersRecord, [column]: value }
+
     setState({
-      filters,
+      filtersRecord,
+      filters: updatedFilters,
       queryParams: {
         ...state.queryParams,
-        filters: toValidQueryFilters(filters)
+        filters: updatedFilters
       }
     })
     resetQueryData()
   }
 
-  // Handler for changing multiple filters at once
-  const handleFiltersChanged = (filters: Record<string, any>) => {
+  const handleEnable = () => {
     setState({
+      queryParams: { ...state.queryParams, disabled: false }
+    })
+    resetQueryData()
+  }
+
+  // Handler for changing multiple filters at once
+  const handleFiltersChanged = (filters: QueryFilter[]) => {
+    // Update the filtersRecord for backward compatibility
+    const filtersRecord = filters.reduce((acc, filter) => {
+      if (filter.column) {
+        acc[filter.column] = filter.value;
+      }
+      return acc;
+    }, {} as Record<string, any>);
+
+    setState({
+      filtersRecord,
       filters,
       queryParams: {
         ...state.queryParams,
-        filters: toValidQueryFilters(filters)
+        filters
       }
     })
     resetQueryData()
@@ -221,7 +258,7 @@ export function useInfiniteDataTable<T>(
     if (query.hasNextPage && !query.isFetchingNextPage) {
       query.fetchNextPage()
     }
-    
+
     setState({
       pageIndex: state.pageIndex + 1
     })
@@ -238,13 +275,14 @@ export function useInfiniteDataTable<T>(
   // Handler for resetting filters
   const resetFilters = () => {
     setState({
-      filters: {},
+      filtersRecord: {},
+      filters: [],
       sorting: [],
       searchTerm: "",
       resultsMap: new Map(),
       queryParams: {
         ...initialState,
-        filters: [],
+        filters: initialState.filters || [],
         sorts: [],
         searchTerm: ""
       }
@@ -259,15 +297,17 @@ export function useInfiniteDataTable<T>(
     state: computeQueryParams(),
     searchTerm: state.searchTerm,
     filters: state.filters,
+    filtersRecord: state.filtersRecord,
     sorting: state.sorting,
     query,
     results,
-    
+
     setPageSize,
     setSearchTerm,
     handleFilterChange,
     handleFiltersChanged,
     handleSortChange,
+    handleEnable,
     goToNextPage,
     goToPreviousPage,
     resetFilters

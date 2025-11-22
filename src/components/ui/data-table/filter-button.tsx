@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { PaginationParams, UsePaginatedHook, QueryFilter, PaginatedResult, WithRelations, TableNames, ForeignKeyRelationMap } from "@/lib/query-controller"
 import { InView } from "react-intersection-observer"
 import { useInfiniteDataTable } from "@/hooks/use-infinite-data"
+import { useDebounce } from "@/hooks/use-debounce"
 
 export interface FilterOption {
   value: string
@@ -57,16 +58,21 @@ export function FilterButton<T extends TableNames, M extends ForeignKeyRelationM
   // Determine if we're using hook mode (with useQueryHook)
   const isHookMode = !!fetchHook
   
-  // For static options mode
-  const [searchQuery, setSearchQuery] = useState("")
+  // State for search input and debounced term
+  const [searchInput, setSearchInput] = useState<string>("");
+  const debouncedSearchTerm = useDebounce(searchInput, 300); // 300ms debounce delay
+  const prevSearchTermRef = useRef<string>("");
   const [filteredOptions, setFilteredOptions] = useState<FilterOption[]>(options)
   
+  const [openedFirstTime, setOpenedFirstTime ] = useState(false);
+
   // Initialize memoized params for useInfiniteDataTable
   const initialParams = {
     pageSize: controllerConfig?.pageSize || 10,
     searchTerm: "",
     searchColumns: controllerConfig?.searchColumns || [],
-    filters: filters,
+    filters: filters || [],
+    disabled: true,
   }
   
   // Use the infinite data hook for dynamic options (only when in hook mode)
@@ -76,58 +82,84 @@ export function FilterButton<T extends TableNames, M extends ForeignKeyRelationM
     query,
     goToNextPage,
     results,
-    handleFiltersChanged
+    handleFiltersChanged,
+    handleEnable,
   } = isHookMode ? useInfiniteDataTable(fetchHook, initialParams, 'filter-button-' + (filterKey || label)) : {
     searchTerm: "",
     setSearchTerm: () => {},
     query: { isLoading: false, isFetching: false, data: null } as any,
     goToNextPage: () => {},
     results: [] as T[],
-    handleFiltersChanged: () => {}
+    handleFiltersChanged: () => {},
+    handleEnable: () => {}
   }
+
+
+
+  
+  // Use a ref to track previous filters to avoid unnecessary updates
+  const prevFiltersRef = useRef<QueryFilter[] | undefined>(undefined);
   
   // Update filters when they change
   useEffect(() => {
     if (isHookMode && filters) {
-      const filtersObj: Record<string, any> = {}
-      for (const filter of filters) {
-        filtersObj[filter.column] = filter.value
+      // Only update if filters have actually changed
+      const currentFiltersStr = JSON.stringify(filters || []);
+      const prevFiltersStr = prevFiltersRef.current ? JSON.stringify(prevFiltersRef.current) : '';
+      
+      if (currentFiltersStr !== prevFiltersStr) {
+        // Pass filters directly to handleFiltersChanged since it now accepts QueryFilter[]
+        handleFiltersChanged(filters);
+        // Update the ref to the current filters
+        prevFiltersRef.current = filters;
       }
-      handleFiltersChanged(filtersObj)
     }
-  }, [isHookMode, filters, handleFiltersChanged])
+  }, [isHookMode, filters]) // Remove handleFiltersChanged from dependencies
+  
+  // This effect will be moved after handleStaticSearch is defined
   
   // Map dynamic results to FilterOption format
   const dynamicOptions = useCallback(() => {
-    if (!isHookMode || !controllerConfig) return []
+    if (!isHookMode || !controllerConfig) {
+      return []
+    }
     
-    return results.map(item => {
+    const mappedOptions = results.map(item => {
       try {
         // Safely access properties using a helper function
         const getValue = (obj: any, prop: string | keyof any) => {
           return typeof obj === 'object' && obj !== null ? obj[prop as string] : undefined;
         };
         
+        const valueField = controllerConfig.valueField;
+        const labelField = controllerConfig.labelField;
+        
+        const value = getValue(item, valueField);
+        const label = getValue(item, labelField);
+        
         return {
-          value: String(getValue(item, controllerConfig.valueField) || ''),
-          label: String(getValue(item, controllerConfig.labelField) || '')
+          value: String(value || ''),
+          label: String(label || '')
         }
       } catch (err) {
         console.warn('Error mapping option:', err)
         return { value: '', label: 'Error' }
       }
     }).filter(option => option.value !== '')
+    
+    return mappedOptions
   }, [isHookMode, controllerConfig, results])
   
   // Handle dropdown open/close
   const handleOpenChange = useCallback(() => {
     setIsOpen(!isOpen)
+    if(!isOpen) {
+      handleEnable();
+    }
   }, [isOpen])
   
   // Handle search for static options
   const handleStaticSearch = useCallback((value: string) => {
-    setSearchQuery(value)
-    
     if (value) {
       setFilteredOptions(
         optionsRef.current.filter(option => 
@@ -139,16 +171,26 @@ export function FilterButton<T extends TableNames, M extends ForeignKeyRelationM
     }
   }, [])
   
+  // Apply debounced search term
+  useEffect(() => {
+    // Only update if the debounced term has actually changed from previous value
+    if (debouncedSearchTerm !== prevSearchTermRef.current) {
+      // Update the ref to track the current search term
+      prevSearchTermRef.current = debouncedSearchTerm;
+      
+      if (isHookMode) {
+        setSearchTerm(debouncedSearchTerm);
+      } else {
+        handleStaticSearch(debouncedSearchTerm);
+      }
+    }
+  }, [debouncedSearchTerm, isHookMode, setSearchTerm, handleStaticSearch])
+  
   // Handle search input changes
   const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value
-    
-    if (isHookMode) {
-      setSearchTerm(value)
-    } else {
-      handleStaticSearch(value)
-    }
-  }, [isHookMode, setSearchTerm, handleStaticSearch])
+    setSearchInput(value)
+  }, [])
   
   // Handle option selection toggle
   const toggleOption = useCallback((optionValue: string) => {
@@ -222,7 +264,7 @@ export function FilterButton<T extends TableNames, M extends ForeignKeyRelationM
               placeholder="Căutare" 
               className="h-8 text-sm" 
               onChange={handleSearchChange}
-              value={isHookMode ? searchTerm : searchQuery}
+              value={searchInput}
             />
           </div>
           <div className="max-h-60 overflow-y-auto p-2">
@@ -244,13 +286,8 @@ export function FilterButton<T extends TableNames, M extends ForeignKeyRelationM
               </div>
             ))}
             
-            {isLoading && (
-              <div className="flex justify-center py-2">
-                <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
-              </div>
-            )}
             
-            {isHookMode && query.isFetchingNextPage && (
+            {(isLoading || (isHookMode && query.isFetchingNextPage)) && (
               <div className="py-2 text-center">
                 <Loader2 className="mx-auto h-4 w-4 animate-spin text-gray-400" />
               </div>

@@ -56,6 +56,7 @@ export interface Filter<T extends TableNames = any, M extends ForeignKeyRelation
   icon?: React.ReactNode
   queryColumn?: string // Column name in the database
   customFilterHandler?: string
+  customHandle?: (value: any) => void
   valueField?: string
   labelField?: string
   searchColumns?: string[]
@@ -66,6 +67,10 @@ interface DataTableProps<TData, TValue, C extends TableNames, M extends ForeignK
   data?: TData[] // Optional initial data
   useController: UseControllerHook<C, M>
   useQueryHook: UsePaginatedHook<TData> // The hook to use for querying data
+  controllerConfig?: {
+    fields?: (keyof any | '*')[] // Fields to fetch
+    relations?: M // Relations to include
+  }
   filters?: Filter[]
   onSearch?: (value: string) => void
   onFilterChange?: (filterId: string, value: any) => void
@@ -105,6 +110,7 @@ export function DataTable<TData, TValue, C extends TableNames, M extends Foreign
   data: initialData,
   useController,
   useQueryHook,
+  controllerConfig,
   filters = [],
   onSearch,
   onFilterChange,
@@ -143,6 +149,7 @@ export function DataTable<TData, TValue, C extends TableNames, M extends Foreign
     handleFilterChange: handleTableFilterChange,
     resetFilters: resetTableFilters,
     isLoading,
+    count,
   } = useDataTable<TData, C, M>(
     useController,
     useQueryHook,
@@ -152,7 +159,8 @@ export function DataTable<TData, TValue, C extends TableNames, M extends Foreign
       searchTerm: "",
       searchColumns,
     },
-    initialSorting
+    initialSorting,
+    controllerConfig // Pass the controller config for custom fields and relations
   )
 
   // Row selection state
@@ -203,7 +211,7 @@ export function DataTable<TData, TValue, C extends TableNames, M extends Foreign
     manualPagination: !!useQueryHook,
     manualSorting: !!useQueryHook,
     manualFiltering: !!useQueryHook,
-    pageCount: query.data?.count !== undefined ? Math.ceil((query.data.count || 0) / pageSize) : -1,
+    pageCount: count !== undefined ? Math.ceil((count || 0) / pageSize) : -1,
   })
 
   useEffect(() => {
@@ -213,6 +221,7 @@ export function DataTable<TData, TValue, C extends TableNames, M extends Foreign
   // Handle search input change
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value
+    console.log('[DataTable] handleSearchChange', { value, searchColumns })
     setSearchTerm(value)
 
     if (onSearch) {
@@ -222,12 +231,20 @@ export function DataTable<TData, TValue, C extends TableNames, M extends Foreign
 
   // Handle filter change
   const handleFilterChange = (filterId: string, value: any) => {
-    // Update filters through the hook
-    handleTableFilterChange(filterId, value)
+    // Check if the filter has a custom handle function
+    const filter = filters.find((filter) => filter.id === filterId);
+    
+    if (filter?.customHandle) {
+      // Call the custom handler with the selected values
+      filter.customHandle(value);
+    } else {
+      // Update filters through the hook
+      handleTableFilterChange(filterId, value);
+    }
 
-    // Notify parent component if onFilterChange is provided
+    // Always notify parent component if onFilterChange is provided
     if (onFilterChange) {
-      onFilterChange(filterId, value)
+      onFilterChange(filterId, value);
     }
   }
 
@@ -478,15 +495,15 @@ export function DataTable<TData, TValue, C extends TableNames, M extends Foreign
 
   // Pagination footer rendering
   const renderPagination = () => {
-    const totalPages = query.data?.count !== undefined ? Math.ceil((query.data.count || 0) / pageSize) : 1
+    const totalPages = count !== undefined ? Math.ceil((count || 0) / pageSize) : 1
 
     // Simple pagination that matches the screenshots
     return (
       <div className="flex flex-col sm:flex-row items-center justify-between bg-gray-50 px-4 py-3">
         <div className="flex items-center gap-2">
           <span className="text-sm text-gray-500">
-            {query.data?.count !== undefined
-              ? `${(query.data.count ?? 0).toLocaleString()} ${rowCountText}`
+            {count !== undefined && count !== null
+              ? `${count?.toLocaleString()} ${rowCountText}`
               : `${table.getFilteredRowModel().rows.length.toLocaleString()} ${rowCountText}`}
           </span>
         </div>
@@ -525,7 +542,7 @@ export function DataTable<TData, TValue, C extends TableNames, M extends Foreign
           </Button>
 
           {/* Next page button (if not on last page) */}
-          {pageIndex < (query.data?.count ? Math.ceil((query.data.count || 0) / pageSize) : 1) - 1 && (
+          {pageIndex < (count ? Math.ceil((count || 0) / pageSize) : 1) - 1 && (
             <Button size="sm" variant="outline" className="h-8 w-8 p-0" onClick={() => goToPage(pageIndex + 1)}>
               {pageIndex + 2}
             </Button>
@@ -632,9 +649,9 @@ export function DataTable<TData, TValue, C extends TableNames, M extends Foreign
                         return filter.fetchHook!(params);
                       }}
                       controllerConfig={{
-                        valueField: filter.valueField || "id",
-                        labelField: filter.labelField || "name",
-                        searchColumns: filter.searchColumns || ["name"]
+                        valueField: filter?.controller?.valueField || "id",
+                        labelField: filter?.controller?.labelField || "name",
+                        searchColumns: filter?.controller?.searchColumns || ["name"]
                       }}
                     />
                   )

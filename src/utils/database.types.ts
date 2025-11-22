@@ -162,55 +162,34 @@ export type Database = {
       disciplines: {
         Row: {
           created_at: string
-          domain_id: number | null
+          curricular_area_id: number | null
           id: number
           name: string
           updated_at: string
         }
         Insert: {
           created_at?: string
-          domain_id?: number | null
+          curricular_area_id?: number | null
           id?: number
           name: string
           updated_at?: string
         }
         Update: {
           created_at?: string
-          domain_id?: number | null
+          curricular_area_id?: number | null
           id?: number
           name?: string
           updated_at?: string
         }
         Relationships: [
           {
-            foreignKeyName: "disciplines_domain_id_fkey"
-            columns: ["domain_id"]
+            foreignKeyName: "disciplines_curricular_area_id_fkey"
+            columns: ["curricular_area_id"]
             isOneToOne: false
-            referencedRelation: "domains"
+            referencedRelation: "curricular_areas"
             referencedColumns: ["id"]
           },
         ]
-      }
-      domains: {
-        Row: {
-          created_at: string
-          id: number
-          name: string
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          id?: number
-          name: string
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          id?: number
-          name?: string
-          updated_at?: string
-        }
-        Relationships: []
       }
       educational_levels: {
         Row: {
@@ -668,6 +647,7 @@ export type Database = {
           created_at: string
           description: string | null
           discipline_id: number | null
+          discipline_text: string | null
           durata: string | null
           evaluator_id: string | null
           id: string
@@ -692,6 +672,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           discipline_id?: number | null
+          discipline_text?: string | null
           durata?: string | null
           evaluator_id?: string | null
           id?: string
@@ -716,6 +697,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           discipline_id?: number | null
+          discipline_text?: string | null
           durata?: string | null
           evaluator_id?: string | null
           id?: string

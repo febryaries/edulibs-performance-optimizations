@@ -13,7 +13,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Avatar } from "@/components/ui/avatar"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Database } from "../../utils/database.types"
-import { ResourceEvaluationInsert, useResourceEvaluationsCrud, useResourcesCrud, useResourceSpecificCompetenciesCrud } from '@/hooks/use-controllers'
+import { ResourceEvaluationInsert, useResourceEvaluationsCrud, useResourcesCrud, useResourceSpecificCompetenciesCrud, useUsersController } from '@/hooks/use-controllers'
 import { useEffect } from "react"
 import { useAnexa3, useAnexa6 } from "@/hooks/use-anexe"
 
@@ -48,6 +48,9 @@ export function ResourceReview({
   const { data: resourceCompetencies } = useResourceCompetencies({ filters: [{ column: 'resource_id', operator: 'eq', value: resourceProp.id }] });
 
   const { user } = useAuth();
+
+  console.log("[LOG] user:", user,user?.user_metadata.role,user?.id === evaluation?.evaluator_id, evaluation?.evaluator_id, user?.id);
+
   const isEvaluator = (user?.user_metadata.role === "EVALUATOR" && user?.id === evaluation?.evaluator_id) || user?.user_metadata.role === "ADMINISTRATOR";
 
   // Helper function to get competency text
@@ -55,7 +58,12 @@ export function ResourceReview({
     // Check if we have competencies from the link table
     if (Array.isArray(resourceCompetencies) && resourceCompetencies.length > 0) {
       return resourceCompetencies
-        .map((item: any) => item.competency?.name || "N/A")
+        .map((item: any) => {
+          if(item.competency_id === -1) {
+            return resource?.specific_competence_text || "N/A"
+          }
+          return item.competency?.name || "N/A"
+        })
         .join(", ");
     }
     
@@ -117,12 +125,42 @@ export function ResourceReview({
   }, [evaluation, form.setValue]);
 
 
+  const usersController = useUsersController()
+
   const onSubmit = (data: ResourceEvaluationInsert) => {
     // // console.log("[LOG] onSubmit data:", evaluation);
     if (!evaluation) return;
     
     updateEvaluation.mutateAsync({ id: evaluation.id, record: data }, {
-      onSuccess: () => {
+      onSuccess: async () => {
+
+        console.log("Updated evaluation with : ", data);
+
+        if(evaluation.status === "CONFORMABLE" || evaluation.status === "UNCONFORMABLE") {
+          const student = await usersController.getById(evaluation.user_id)
+          if(student && resource) {
+            // Call /api/notify 
+            const notifyResponse = await fetch('/api/notify', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                resource: {
+                  id: resource?.id,
+                  title: resource?.title,
+                },
+                recipients: [
+                  {
+                    email: student.email,
+                    name: student.first_name + " " + student.last_name
+                  },
+                ],
+              }),
+            });
+          }
+        }
+
         toast({ title: "Evaluare salvată", description: "Modificările au fost salvate cu succes.", variant: "success" });
       },
       onError: (error: unknown) => {
@@ -260,7 +298,7 @@ export function ResourceReview({
             {isGeneratingAnexa3 ? "Generare..." : "Descarcă fișa descriptivă"}
           </Button>
 
-          <Button 
+          <Button
             variant="outline" 
             className="flex items-center gap-2"
             onClick={handleGenerateEvaluationDocument}
@@ -354,11 +392,21 @@ export function ResourceReview({
                   {/* Display competencies from the link table in detail */}
                   {Array.isArray(resourceCompetencies) && resourceCompetencies.length > 0 && (
                     <div className="space-y-2 mt-2">
-                      {resourceCompetencies.map((item: any) => (
+                      {resourceCompetencies.map((item: any) => {
+                        
+                        if(item.competency_id === -1){
+                          return (
+                            <div key={item.id} className="bg-gray-50 p-2 rounded-md">
+                              {resource?.specific_competence_text || "N/A"}
+                            </div>
+                          )
+                        }
+                        
+                        return (
                         <div key={item.id} className="bg-gray-50 p-2 rounded-md">
                           {item.competency?.name || "N/A"}
                         </div>
-                      ))}
+                      )})}
                     </div>
                   )}
                 </div>

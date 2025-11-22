@@ -95,7 +95,7 @@ export const generateAnnex6 = async (data: Gen6Data): Promise<void> => {
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `anexa_3_${validatedData.serial_number}_RED.docx`;
+    link.download = `anexa_6_${validatedData.serial_number}_RED.docx`;
     document.body.appendChild(link);
     link.click();
     

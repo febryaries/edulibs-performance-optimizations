@@ -26,9 +26,9 @@ export default function NomenclatorLayout({ children }: { children: ReactNode })
 
             <SidebarItem
               icon={<Layers className="h-4 w-4" />}
-              href="/dashboard/nomenclator/domenii"
+              href="/dashboard/nomenclator/ariicurriculare"
             >
-              Domenii
+              Arii Curriculare
             </SidebarItem>
 
             <SidebarItem
