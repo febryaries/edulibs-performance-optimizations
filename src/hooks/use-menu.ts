@@ -9,25 +9,16 @@ import {
   BarChart3,
 } from "lucide-react";
 import { usePathname } from "next/navigation";
-import {
-  useGroupsCrud,
-  useResourcesCrud,
-  useUsersCrud,
-} from "./use-controllers";
 import { useAuth } from "@/lib/auth-context";
+import { useStatsCounts } from "./use-stats-counts";
 
 export default function useMenu() {
   const pathname = usePathname();
   const { profile } = useAuth();
   const normalizedRole = (profile?.role || "STUDENT").toUpperCase();
 
-  const { useCount: useResourcesCount } = useResourcesCrud();
-  const { useCount: useGroupsCount } = useGroupsCrud();
-  const { useCount: useUsersCount } = useUsersCrud();
-
-  const resources = useResourcesCount();
-  const groups = useGroupsCount();
-  const users = useUsersCount();
+  // Folosim un singur API call pentru toate count-urile
+  const { data: counts } = useStatsCounts();
   // Define menu config for each role
   const menuConfig: Record<string, string[]> = {
     STUDENT: ["RESURSE", "SETARI"],
@@ -51,7 +42,7 @@ export default function useMenu() {
       label: "Resurse",
       href: "/dashboard",
       icon: BookOpen,
-      count: resources.data || 0,
+      count: counts?.resources || 0,
       active: pathname.endsWith("/dashboard"),
     },
     {
@@ -59,7 +50,7 @@ export default function useMenu() {
       label: "Grupe",
       href: "/dashboard/grupe",
       icon: Layers,
-      count: groups.data || 0,
+      count: counts?.groups || 0,
       active: pathname.includes("/grupe"),
     },
     {
@@ -67,7 +58,7 @@ export default function useMenu() {
       label: "Utilizatori",
       href: "/dashboard/utilizatori",
       icon: Users,
-      count: users.data || 0,
+      count: counts?.users || 0,
       active: pathname.includes("/utilizatori"),
     },
     {

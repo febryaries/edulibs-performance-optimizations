@@ -50,7 +50,7 @@ const MetricCard = ({
 );
 
 export default function StatisticiPage() {
-  const { user, isLoading: authLoading } = useAuth();
+  const { user, profile, isLoading: authLoading } = useAuth();
   const router = useRouter();
   const supabase = useSupabaseBrowser();
   const [mounted, setMounted] = useState(false);
@@ -80,13 +80,13 @@ export default function StatisticiPage() {
 
   useEffect(() => {
     if (!authLoading && mounted) {
-      if (!user || !isAdmin(user)) {
+      if (!user || !isAdmin(user, profile)) {
         router.push("/dashboard");
       } else {
         fetchStatistics();
       }
     }
-  }, [user, authLoading, mounted]);
+  }, [user, profile, authLoading, mounted]);
 
   const fetchStatistics = async () => {
     try {
@@ -317,7 +317,7 @@ export default function StatisticiPage() {
     );
   }
 
-  if (!user || !isAdmin(user)) {
+  if (!user || !isAdmin(user, profile)) {
     return null;
   }
 
