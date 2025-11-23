@@ -4,21 +4,6 @@ import { useEffect, useState } from "react";
 import { useAuth, isAdmin } from "@/lib/auth-context";
 import { useRouter } from "next/navigation";
 import {
-  LineChart,
-  Line,
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from "recharts";
-import {
   Card,
   CardContent,
   CardDescription,
@@ -31,79 +16,23 @@ import {
   GraduationCap,
   TrendingUp,
   FileCheck,
-  Clock,
 } from "lucide-react";
-
-// Mock data - va fi înlocuit cu date reale din Supabase
-const resourcesOverTimeData = [
-  { month: "Ian", resurse: 45 },
-  { month: "Feb", resurse: 52 },
-  { month: "Mar", resurse: 68 },
-  { month: "Apr", resurse: 73 },
-  { month: "Mai", resurse: 89 },
-  { month: "Iun", resurse: 95 },
-];
-
-const resourcesByStatusData = [
-  { name: "Conform", value: 245, color: "#10b981" },
-  { name: "În evaluare", value: 89, color: "#f59e0b" },
-  { name: "Ciornă", value: 156, color: "#6b7280" },
-  { name: "Neconform", value: 34, color: "#ef4444" },
-];
-
-const topDisciplinesData = [
-  { name: "Matematică", resurse: 145 },
-  { name: "Limba Română", resurse: 132 },
-  { name: "Științe", resurse: 98 },
-  { name: "Istorie", resurse: 87 },
-  { name: "Geografie", resurse: 76 },
-  { name: "Fizică", resurse: 65 },
-  { name: "Chimie", resurse: 54 },
-  { name: "Biologie", resurse: 48 },
-];
-
-const topAuthorsData = [
-  { name: "Ion Popescu", resurse: 45 },
-  { name: "Maria Ionescu", resurse: 38 },
-  { name: "Andrei Georgescu", resurse: 32 },
-  { name: "Elena Dumitrescu", resurse: 28 },
-  { name: "Mihai Stanciu", resurse: 25 },
-];
-
-const usersOverTimeData = [
-  { month: "Ian", utilizatori: 1200 },
-  { month: "Feb", utilizatori: 1450 },
-  { month: "Mar", utilizatori: 1680 },
-  { month: "Apr", utilizatori: 1920 },
-  { month: "Mai", utilizatori: 2150 },
-  { month: "Iun", utilizatori: 2380 },
-];
-
-const usersByRoleData = [
-  { name: "Student", value: 15234, color: "#3b82f6" },
-  { name: "Formator", value: 1245, color: "#8b5cf6" },
-  { name: "Evaluator", value: 234, color: "#f59e0b" },
-  { name: "Admin", value: 45, color: "#ef4444" },
-];
-
-const topGroupsData = [
-  { name: "Grupa 101", cursanti: 32 },
-  { name: "Grupa 205", cursanti: 30 },
-  { name: "Grupa 312", cursanti: 28 },
-  { name: "Grupa 145", cursanti: 27 },
-  { name: "Grupa 220", cursanti: 25 },
-];
+import { useSupabaseBrowser } from "@/utils/supabase/client";
+import {
+  useResourcesCrud,
+  useUsersCrud,
+  useGroupsCrud,
+} from "@/hooks/use-controllers";
+import { HighchartsWrapper } from "@/components/charts/HighchartsWrapper";
 
 const MetricCard = ({
   title,
   value,
-  change,
   icon: Icon,
   color,
 }: {
   title: string;
   value: string | number;
-  change?: string;
   icon: any;
   color: string;
 }) => (
@@ -116,12 +45,6 @@ const MetricCard = ({
     </CardHeader>
     <CardContent>
       <div className="text-2xl font-bold">{value}</div>
-      {change && (
-        <p className="text-xs text-green-600 mt-1">
-          <TrendingUp className="inline h-3 w-3 mr-1" />
-          {change}
-        </p>
-      )}
     </CardContent>
   </Card>
 );
@@ -129,7 +52,27 @@ const MetricCard = ({
 export default function StatisticiPage() {
   const { user, isLoading: authLoading } = useAuth();
   const router = useRouter();
+  const supabase = useSupabaseBrowser();
   const [mounted, setMounted] = useState(false);
+
+  // Get counts from controllers
+  const { useCount: useResourcesCount } = useResourcesCrud();
+  const { useCount: useUsersCount } = useUsersCrud();
+  const { useCount: useGroupsCount } = useGroupsCrud();
+
+  const resourcesCount = useResourcesCount();
+  const usersCount = useUsersCount();
+  const groupsCount = useGroupsCount();
+
+  // State for real data
+  const [usersByRole, setUsersByRole] = useState<any[]>([]);
+  const [resourcesByStatus, setResourcesByStatus] = useState<any[]>([]);
+  const [resourcesOverTime, setResourcesOverTime] = useState<any[]>([]);
+  const [usersOverTime, setUsersOverTime] = useState<any[]>([]);
+  const [topDisciplines, setTopDisciplines] = useState<any[]>([]);
+  const [topAuthors, setTopAuthors] = useState<any[]>([]);
+  const [topGroups, setTopGroups] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setMounted(true);
@@ -139,11 +82,234 @@ export default function StatisticiPage() {
     if (!authLoading && mounted) {
       if (!user || !isAdmin(user)) {
         router.push("/dashboard");
+      } else {
+        fetchStatistics();
       }
     }
-  }, [user, authLoading, mounted, router]);
+  }, [user, authLoading, mounted]);
 
-  if (authLoading || !mounted) {
+  const fetchStatistics = async () => {
+    try {
+      setLoading(true);
+
+      // Fetch users by role
+      const { data: users } = await supabase.from("users").select("role");
+
+      if (users) {
+        const roleCounts = users.reduce((acc: any, user: any) => {
+          const role = user.role || "STUDENT";
+          acc[role] = (acc[role] || 0) + 1;
+          return acc;
+        }, {});
+
+        const roleColors: any = {
+          STUDENT: "#3b82f6",
+          FORMATOR: "#8b5cf6",
+          EVALUATOR: "#f59e0b",
+          ADMINISTRATOR: "#ef4444",
+          MODERATOR: "#10b981",
+        };
+
+        const roleLabels: any = {
+          STUDENT: "Student",
+          FORMATOR: "Formator",
+          EVALUATOR: "Evaluator",
+          ADMINISTRATOR: "Admin",
+          MODERATOR: "Moderator",
+        };
+
+        setUsersByRole(
+          Object.entries(roleCounts).map(([role, count]) => ({
+            name: roleLabels[role] || role,
+            value: count,
+            color: roleColors[role] || "#6b7280",
+          }))
+        );
+      }
+
+      // Fetch resources by status
+      const { data: resources } = await supabase
+        .from("resources")
+        .select("status");
+
+      if (resources) {
+        const statusCounts = resources.reduce((acc: any, resource: any) => {
+          const status = resource.status || "DRAFT";
+          acc[status] = (acc[status] || 0) + 1;
+          return acc;
+        }, {});
+
+        const statusColors: any = {
+          CONFORMABLE: "#10b981",
+          IN_REVIEW: "#f59e0b",
+          DRAFT: "#6b7280",
+          UNCONFORMABLE: "#ef4444",
+        };
+
+        const statusLabels: any = {
+          CONFORMABLE: "Conform",
+          IN_REVIEW: "În evaluare",
+          DRAFT: "Ciornă",
+          UNCONFORMABLE: "Neconform",
+        };
+
+        setResourcesByStatus(
+          Object.entries(statusCounts).map(([status, count]) => ({
+            name: statusLabels[status] || status,
+            value: count,
+            color: statusColors[status] || "#6b7280",
+          }))
+        );
+      }
+
+      // Fetch resources over time (last 6 months)
+      const { data: resourcesWithDate } = await supabase
+        .from("resources")
+        .select("created_at")
+        .order("created_at", { ascending: true });
+
+      if (resourcesWithDate) {
+        const monthCounts: any = {};
+        const months = [
+          "Ian",
+          "Feb",
+          "Mar",
+          "Apr",
+          "Mai",
+          "Iun",
+          "Iul",
+          "Aug",
+          "Sep",
+          "Oct",
+          "Noi",
+          "Dec",
+        ];
+
+        resourcesWithDate.forEach((r: any) => {
+          const date = new Date(r.created_at);
+          const monthKey = `${months[date.getMonth()]} ${date.getFullYear()}`;
+          monthCounts[monthKey] = (monthCounts[monthKey] || 0) + 1;
+        });
+
+        const last6Months = Object.entries(monthCounts)
+          .slice(-6)
+          .map(([month, count]) => ({ month: month.split(" ")[0], count }));
+
+        setResourcesOverTime(last6Months);
+      }
+
+      // Fetch users over time (last 6 months)
+      const { data: usersWithDate } = await supabase
+        .from("users")
+        .select("created_at")
+        .order("created_at", { ascending: true });
+
+      if (usersWithDate) {
+        const monthCounts: any = {};
+        const months = [
+          "Ian",
+          "Feb",
+          "Mar",
+          "Apr",
+          "Mai",
+          "Iun",
+          "Iul",
+          "Aug",
+          "Sep",
+          "Oct",
+          "Noi",
+          "Dec",
+        ];
+
+        let cumulative = 0;
+        usersWithDate.forEach((u: any) => {
+          const date = new Date(u.created_at);
+          const monthKey = `${months[date.getMonth()]} ${date.getFullYear()}`;
+          monthCounts[monthKey] = (monthCounts[monthKey] || 0) + 1;
+        });
+
+        const last6Months = Object.entries(monthCounts)
+          .slice(-6)
+          .map(([month, count]: any) => {
+            cumulative += count;
+            return { month: month.split(" ")[0], count: cumulative };
+          });
+
+        setUsersOverTime(last6Months);
+      }
+
+      // Fetch top disciplines
+      const { data: resourcesWithDiscipline } = await supabase
+        .from("resources")
+        .select("discipline_id, disciplines(name)")
+        .not("discipline_id", "is", null);
+
+      if (resourcesWithDiscipline) {
+        const disciplineCounts: any = {};
+        resourcesWithDiscipline.forEach((r: any) => {
+          const name = r.disciplines?.name || "Altele";
+          disciplineCounts[name] = (disciplineCounts[name] || 0) + 1;
+        });
+
+        const top8 = Object.entries(disciplineCounts)
+          .sort(([, a]: any, [, b]: any) => b - a)
+          .slice(0, 8)
+          .map(([name, count]) => ({ name, count }));
+
+        setTopDisciplines(top8);
+      }
+
+      // Fetch top authors
+      const { data: resourcesWithAuthor } = await supabase
+        .from("resources")
+        .select(
+          "author_id, users!resources_author_id_fkey(first_name, last_name)"
+        )
+        .not("author_id", "is", null);
+
+      if (resourcesWithAuthor) {
+        const authorCounts: any = {};
+        resourcesWithAuthor.forEach((r: any) => {
+          const name = r.users
+            ? `${r.users.first_name} ${r.users.last_name}`
+            : "Anonim";
+          authorCounts[name] = (authorCounts[name] || 0) + 1;
+        });
+
+        const top5 = Object.entries(authorCounts)
+          .sort(([, a]: any, [, b]: any) => b - a)
+          .slice(0, 5)
+          .map(([name, count]) => ({ name, count }));
+
+        setTopAuthors(top5);
+      }
+
+      // Fetch top groups
+      const { data: groupsWithMembers } = await supabase
+        .from("groups")
+        .select("id, name, group_members(count)");
+
+      if (groupsWithMembers) {
+        const groupCounts = groupsWithMembers.map((g: any) => ({
+          name: g.name,
+          count: g.group_members?.length || 0,
+        }));
+
+        const top5 = groupCounts
+          .sort((a: any, b: any) => b.count - a.count)
+          .slice(0, 5);
+
+        setTopGroups(top5);
+      }
+
+      setLoading(false);
+    } catch (error) {
+      console.error("Error fetching statistics:", error);
+      setLoading(false);
+    }
+  };
+
+  if (authLoading || !mounted || loading) {
     return (
       <div className="flex justify-center items-center h-screen">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -154,6 +320,12 @@ export default function StatisticiPage() {
   if (!user || !isAdmin(user)) {
     return null;
   }
+
+  const totalResources = resourcesCount.data || 0;
+  const totalUsers = usersCount.data || 0;
+  const totalGroups = groupsCount.data || 0;
+  const conformResources =
+    resourcesByStatus.find((s) => s.name === "Conform")?.value || 0;
 
   return (
     <div className="px-6 py-6">
@@ -170,38 +342,34 @@ export default function StatisticiPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <MetricCard
           title="Total Resurse"
-          value="6,973"
-          change="+12% față de luna trecută"
+          value={totalResources.toLocaleString()}
           icon={BookOpen}
           color="text-blue-600"
         />
         <MetricCard
           title="Total Utilizatori"
-          value="17,339"
-          change="+8% față de luna trecută"
+          value={totalUsers.toLocaleString()}
           icon={Users}
           color="text-purple-600"
         />
         <MetricCard
           title="Total Grupe"
-          value="499"
-          change="+5% față de luna trecută"
+          value={totalGroups.toLocaleString()}
           icon={GraduationCap}
           color="text-green-600"
         />
         <MetricCard
-          title="Rata Aprobare"
-          value="87.8%"
-          change="+2.3% față de luna trecută"
+          title="Resurse Conforme"
+          value={conformResources.toLocaleString()}
           icon={FileCheck}
           color="text-amber-600"
         />
       </div>
 
-      {/* Resurse Educaționale Section */}
+      {/* Line Charts - Evoluție în timp */}
       <div className="mb-6">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">
-          📊 Resurse Educaționale
+          📈 Evoluție în Timp
         </h2>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* Evoluția resurselor */}
@@ -211,109 +379,39 @@ export default function StatisticiPage() {
               <CardDescription>Ultimele 6 luni</CardDescription>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={resourcesOverTimeData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Line
-                    type="monotone"
-                    dataKey="resurse"
-                    stroke="#3b82f6"
-                    strokeWidth={2}
-                    name="Resurse"
-                  />
-                </LineChart>
-              </ResponsiveContainer>
+              <HighchartsWrapper
+                options={{
+                  chart: {
+                    type: "line",
+                    height: 300,
+                  },
+                  title: {
+                    text: "",
+                  },
+                  xAxis: {
+                    categories: resourcesOverTime.map((d) => d.month),
+                  },
+                  yAxis: {
+                    title: {
+                      text: "Număr Resurse",
+                    },
+                  },
+                  series: [
+                    {
+                      type: "line",
+                      name: "Resurse",
+                      data: resourcesOverTime.map((d) => d.count),
+                      color: "#3b82f6",
+                    },
+                  ] as any,
+                  credits: {
+                    enabled: false,
+                  },
+                }}
+              />
             </CardContent>
           </Card>
 
-          {/* Distribuția pe statusuri */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Distribuție pe Statusuri</CardTitle>
-              <CardDescription>Status actual resurse</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={resourcesByStatusData}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={false}
-                    outerRadius={80}
-                    fill="#8884d8"
-                    dataKey="value"
-                  >
-                    {resourcesByStatusData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    formatter={(value: number) => value.toLocaleString()}
-                  />
-                  <Legend
-                    verticalAlign="bottom"
-                    height={36}
-                    formatter={(value, entry: any) =>
-                      `${value} (${entry.payload.value.toLocaleString()})`
-                    }
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          {/* Top discipline */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Top 8 Discipline</CardTitle>
-              <CardDescription>Cele mai multe resurse</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={topDisciplinesData} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" />
-                  <YAxis dataKey="name" type="category" width={100} />
-                  <Tooltip />
-                  <Bar dataKey="resurse" fill="#3b82f6" name="Resurse" />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          {/* Top autori */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Top 5 Autori</CardTitle>
-              <CardDescription>Cei mai productivi</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={topAuthorsData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis />
-                  <Tooltip />
-                  <Bar dataKey="resurse" fill="#10b981" name="Resurse" />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-
-      {/* Utilizatori Section */}
-      <div className="mb-6">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">
-          👥 Utilizatori
-        </h2>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* Evoluția utilizatorilor */}
           <Card>
             <CardHeader>
@@ -321,118 +419,347 @@ export default function StatisticiPage() {
               <CardDescription>Ultimele 6 luni</CardDescription>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={usersOverTimeData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Line
-                    type="monotone"
-                    dataKey="utilizatori"
-                    stroke="#8b5cf6"
-                    strokeWidth={2}
-                    name="Utilizatori"
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          {/* Distribuția pe roluri */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Distribuție pe Roluri</CardTitle>
-              <CardDescription>Tipuri de utilizatori</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={usersByRoleData}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={false}
-                    outerRadius={80}
-                    fill="#8884d8"
-                    dataKey="value"
-                  >
-                    {usersByRoleData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    formatter={(value: number) => value.toLocaleString()}
-                  />
-                  <Legend
-                    verticalAlign="bottom"
-                    height={36}
-                    formatter={(value, entry: any) =>
-                      `${value} (${entry.payload.value.toLocaleString()})`
-                    }
-                  />
-                </PieChart>
-              </ResponsiveContainer>
+              <HighchartsWrapper
+                options={{
+                  chart: {
+                    type: "line",
+                    height: 300,
+                  },
+                  title: {
+                    text: "",
+                  },
+                  xAxis: {
+                    categories: usersOverTime.map((d) => d.month),
+                  },
+                  yAxis: {
+                    title: {
+                      text: "Număr Utilizatori",
+                    },
+                  },
+                  series: [
+                    {
+                      type: "line",
+                      name: "Utilizatori",
+                      data: usersOverTime.map((d) => d.count),
+                      color: "#8b5cf6",
+                    },
+                  ] as any,
+                  credits: {
+                    enabled: false,
+                  },
+                }}
+              />
             </CardContent>
           </Card>
         </div>
       </div>
 
-      {/* Grupe & Cursanți Section */}
+      {/* Bar Charts - Top-uri */}
       <div className="mb-6">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">
-          🎓 Grupe & Cursanți
+          🏆 Top Performanțe
         </h2>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Top grupe */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* Top Discipline */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Top 8 Discipline</CardTitle>
+              <CardDescription>Cele mai multe resurse</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <HighchartsWrapper
+                options={{
+                  chart: {
+                    type: "bar",
+                    height: 350,
+                  },
+                  title: {
+                    text: "",
+                  },
+                  xAxis: {
+                    categories: topDisciplines.map((d) => d.name),
+                  },
+                  yAxis: {
+                    title: {
+                      text: "Resurse",
+                    },
+                  },
+                  series: [
+                    {
+                      type: "bar",
+                      name: "Resurse",
+                      data: topDisciplines.map((d) => d.count),
+                      color: "#3b82f6",
+                    },
+                  ] as any,
+                  legend: {
+                    enabled: false,
+                  },
+                  credits: {
+                    enabled: false,
+                  },
+                }}
+              />
+            </CardContent>
+          </Card>
+
+          {/* Top Autori */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Top 5 Autori</CardTitle>
+              <CardDescription>Cei mai productivi</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <HighchartsWrapper
+                options={{
+                  chart: {
+                    type: "bar",
+                    height: 350,
+                  },
+                  title: {
+                    text: "",
+                  },
+                  xAxis: {
+                    categories: topAuthors.map((d) => d.name),
+                  },
+                  yAxis: {
+                    title: {
+                      text: "Resurse",
+                    },
+                  },
+                  series: [
+                    {
+                      type: "bar",
+                      name: "Resurse",
+                      data: topAuthors.map((d) => d.count),
+                      color: "#10b981",
+                    },
+                  ] as any,
+                  legend: {
+                    enabled: false,
+                  },
+                  credits: {
+                    enabled: false,
+                  },
+                }}
+              />
+            </CardContent>
+          </Card>
+
+          {/* Top Grupe */}
           <Card>
             <CardHeader>
               <CardTitle>Top 5 Grupe</CardTitle>
               <CardDescription>Număr de cursanți</CardDescription>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={topGroupsData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis />
-                  <Tooltip />
-                  <Bar dataKey="cursanti" fill="#f59e0b" name="Cursanți" />
-                </BarChart>
-              </ResponsiveContainer>
+              <HighchartsWrapper
+                options={{
+                  chart: {
+                    type: "bar",
+                    height: 350,
+                  },
+                  title: {
+                    text: "",
+                  },
+                  xAxis: {
+                    categories: topGroups.map((d) => d.name),
+                  },
+                  yAxis: {
+                    title: {
+                      text: "Cursanți",
+                    },
+                  },
+                  series: [
+                    {
+                      type: "bar",
+                      name: "Cursanți",
+                      data: topGroups.map((d) => d.count),
+                      color: "#f59e0b",
+                    },
+                  ] as any,
+                  legend: {
+                    enabled: false,
+                  },
+                  credits: {
+                    enabled: false,
+                  },
+                }}
+              />
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      {/* Pie & Radial Charts - Distribuții */}
+      <div className="mb-6">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">
+          📊 Distribuții
+        </h2>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Polar Radial Bar - Resurse */}
+          <Card>
+            <CardHeader>
+              <CardTitle>📈 Rezumat Detaliat Resurse</CardTitle>
+              <CardDescription>
+                Status actual resurse ({totalResources} total)
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {resourcesByStatus.length > 0 ? (
+                <HighchartsWrapper
+                  options={{
+                    chart: {
+                      polar: true,
+                      type: "column",
+                      height: 400,
+                    },
+                    title: {
+                      text: "",
+                    },
+                    pane: {
+                      size: "70%",
+                      startAngle: 0,
+                      endAngle: 360,
+                    },
+                    xAxis: {
+                      tickInterval: 1,
+                      labels: {
+                        style: {
+                          fontSize: "13px",
+                          fontWeight: "500",
+                        },
+                      },
+                      lineWidth: 0,
+                      categories: resourcesByStatus.map((s) => s.name),
+                    },
+                    yAxis: {
+                      min: 0,
+                      max:
+                        Math.max(...resourcesByStatus.map((s) => s.value)) *
+                        1.2,
+                      lineWidth: 0,
+                      tickInterval: Math.ceil(totalResources / 4),
+                      reversedStacks: false,
+                      endOnTick: false,
+                      showLastLabel: false,
+                      labels: {
+                        enabled: false,
+                      },
+                    },
+                    plotOptions: {
+                      column: {
+                        stacking: "normal",
+                        borderWidth: 0,
+                        pointPadding: 0,
+                        groupPadding: 0.15,
+                        dataLabels: {
+                          enabled: true,
+                          format: "{y}",
+                          style: {
+                            fontSize: "11px",
+                            fontWeight: "bold",
+                          },
+                        },
+                      },
+                    },
+                    series: [
+                      {
+                        type: "column",
+                        name: "Resurse",
+                        data: resourcesByStatus.map((s) => ({
+                          y: s.value,
+                          color: s.color,
+                        })),
+                        showInLegend: false,
+                      },
+                    ] as any,
+                    tooltip: {
+                      formatter: function (this: any) {
+                        return `<b>${this.x}</b><br/>${
+                          this.series.name
+                        }: ${this.y.toLocaleString()}`;
+                      },
+                    },
+                    credits: {
+                      enabled: false,
+                    },
+                  }}
+                />
+              ) : (
+                <div className="h-[400px] flex items-center justify-center text-gray-500">
+                  Nu există date disponibile
+                </div>
+              )}
             </CardContent>
           </Card>
 
-          {/* Metrici grupe */}
+          {/* Packed Bubble - Utilizatori */}
           <Card>
             <CardHeader>
-              <CardTitle>Metrici Grupe</CardTitle>
-              <CardDescription>Statistici generale</CardDescription>
+              <CardTitle>👥 Detalii Utilizatori</CardTitle>
+              <CardDescription>
+                Tipuri de utilizatori ({totalUsers} total)
+              </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between p-4 bg-blue-50 rounded-lg">
-                <div>
-                  <p className="text-sm text-gray-600">Total Grupe</p>
-                  <p className="text-2xl font-bold text-blue-600">499</p>
+            <CardContent>
+              {usersByRole.length > 0 ? (
+                <HighchartsWrapper
+                  options={{
+                    chart: {
+                      type: "packedbubble",
+                      height: 400,
+                    },
+                    title: {
+                      text: "",
+                    },
+                    tooltip: {
+                      useHTML: true,
+                      pointFormat:
+                        "<b>{point.name}:</b> {point.value} utilizatori",
+                    },
+                    plotOptions: {
+                      packedbubble: {
+                        minSize: "50%",
+                        maxSize: "200%",
+                        layoutAlgorithm: {
+                          splitSeries: false,
+                          gravitationalConstant: 0.01,
+                          friction: -0.9,
+                        },
+                        dataLabels: {
+                          enabled: true,
+                          format: "{point.name}",
+                          style: {
+                            color: "white",
+                            textOutline: "none",
+                            fontWeight: "bold",
+                            fontSize: "14px",
+                          },
+                        },
+                      },
+                    },
+                    series: [
+                      {
+                        type: "packedbubble",
+                        name: "Utilizatori",
+                        data: usersByRole.map((role) => ({
+                          name: role.name,
+                          value: role.value,
+                          color: role.color,
+                        })),
+                      },
+                    ] as any,
+                    credits: {
+                      enabled: false,
+                    },
+                  }}
+                />
+              ) : (
+                <div className="h-[400px] flex items-center justify-center text-gray-500">
+                  Nu există date disponibile
                 </div>
-                <GraduationCap className="h-8 w-8 text-blue-600" />
-              </div>
-              <div className="flex items-center justify-between p-4 bg-green-50 rounded-lg">
-                <div>
-                  <p className="text-sm text-gray-600">Total Cursanți</p>
-                  <p className="text-2xl font-bold text-green-600">6,969</p>
-                </div>
-                <Users className="h-8 w-8 text-green-600" />
-              </div>
-              <div className="flex items-center justify-between p-4 bg-purple-50 rounded-lg">
-                <div>
-                  <p className="text-sm text-gray-600">Medie Cursanți/Grupă</p>
-                  <p className="text-2xl font-bold text-purple-600">14</p>
-                </div>
-                <TrendingUp className="h-8 w-8 text-purple-600" />
-              </div>
+              )}
             </CardContent>
           </Card>
         </div>
