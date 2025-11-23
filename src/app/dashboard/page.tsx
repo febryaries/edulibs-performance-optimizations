@@ -33,6 +33,7 @@ const ResourceReview = dynamic(() =>
 );
 import { Sheet, SheetContent } from "@/components/ui/sheet-fullscreen";
 import { Avatar } from "@/components/ui/avatar";
+import { ResourceCard } from "@/components/resources/resource-card";
 import {
   Plus,
   BookOpen,
@@ -915,6 +916,11 @@ export default function DashboardPage() {
               referencedTable: "disciplines",
               isOneToMany: false,
             },
+            resources_class_id_fkey: {
+              alias: "class",
+              referencedTable: "classes",
+              isOneToMany: false,
+            },
             resources_evaluator_id_fkey: {
               alias: "evaluator",
               referencedTable: "users",
@@ -940,6 +946,12 @@ export default function DashboardPage() {
         onRowClick={handleViewResource}
         getStatusClass={getStatusClass}
         refetchKey="resources"
+        renderCard={(resource) => (
+          <ResourceCard
+            resource={resource}
+            onClick={() => handleViewResource(resource)}
+          />
+        )}
       />
 
       {/* Resource Sheet - shows either Form or Viewer based on currentView */}
