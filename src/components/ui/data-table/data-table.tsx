@@ -919,9 +919,9 @@ export function DataTable<
       ) : (
         /* Table for desktop */
         <div className="border rounded-md overflow-hidden">
-          <div className="relative overflow-x-auto">
+          <div className="relative overflow-x-auto max-h-[calc(100vh-300px)]">
             <table className="w-full text-sm text-left text-gray-500">
-              <thead className="text-xs text-white bg-blue-600">
+              <thead className="text-xs text-white bg-blue-600 sticky top-0 z-10">
                 <tr>
                   {enableRowSelection && (
                     <th className="px-4 py-3 w-10">
