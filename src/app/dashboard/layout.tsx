@@ -91,11 +91,11 @@ export default function DashboardLayout({
           },
           {
             href: "/terms",
-            label: "Terms",
+            label: "Termeni",
           },
           {
             href: "/privacy",
-            label: "Privacy",
+            label: "Confidențialitate",
           },
         ]}
       />
