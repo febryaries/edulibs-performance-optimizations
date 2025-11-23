@@ -1,20 +1,20 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { User } from "lucide-react"
-import { cn } from "@/lib/utils"
+import * as React from "react";
+import { User } from "lucide-react";
+import { cn } from "@/lib/utils";
 
-type AvatarSize = "32" | "40" | "48" | "64" | "96"
-type AvatarVariant = "01" | "02" | "03" | "04" | "05" | "populated" | "empty"
+type AvatarSize = "32" | "40" | "48" | "64" | "96";
+type AvatarVariant = "01" | "02" | "03" | "04" | "05" | "populated" | "empty";
 
 interface AvatarProps extends React.HTMLAttributes<HTMLDivElement> {
-  size?: AvatarSize
-  variant?: AvatarVariant
-  initials?: string
-  src?: string
-  alt?: string
-  fallback?: React.ReactNode
-  className?: string
+  size?: AvatarSize;
+  variant?: AvatarVariant;
+  initials?: string;
+  src?: string;
+  alt?: string;
+  fallback?: React.ReactNode;
+  className?: string;
 }
 
 const sizeStyles: Record<AvatarSize, string> = {
@@ -23,7 +23,7 @@ const sizeStyles: Record<AvatarSize, string> = {
   "48": "w-12 h-12 text-base",
   "64": "w-16 h-16 text-lg",
   "96": "w-24 h-24 text-xl",
-}
+};
 
 export function Avatar({
   size = "48",
@@ -35,8 +35,8 @@ export function Avatar({
   className,
   ...props
 }: AvatarProps) {
-  const [isHovered, setIsHovered] = React.useState(false)
-  const [imageError, setImageError] = React.useState(false)
+  const [isHovered, setIsHovered] = React.useState(false);
+  const [imageError, setImageError] = React.useState(false);
 
   const variantStyles: Record<AvatarVariant, string> = {
     "01": "bg-avatar-1 text-text-inverted",
@@ -46,7 +46,7 @@ export function Avatar({
     "05": "bg-avatar-5 text-text-inverted",
     populated: "bg-transparent",
     empty: "bg-gray-100 text-gray-400",
-  }
+  };
 
   const hoverStyles: Record<AvatarVariant, string> = {
     "01": "hover:shadow-[0_0_0_4px_rgba(59,130,246,0.3)]",
@@ -56,20 +56,20 @@ export function Avatar({
     "05": "hover:shadow-[0_0_0_4px_rgba(245,158,11,0.3)]",
     populated: "hover:shadow-[0_0_0_4px_rgba(203,213,225,0.3)]",
     empty: "hover:shadow-[0_0_0_4px_rgba(203,213,225,0.3)] hover:bg-gray-200",
-  }
+  };
 
-  const showImage = src && !imageError && variant === "populated"
-  const showInitials = initials && !showImage && variant !== "empty"
-  const showFallback = !showImage && !showInitials
+  const showImage = src && !imageError && variant === "populated";
+  const showInitials = initials && !showImage && variant !== "empty";
+  const showFallback = !showImage && !showInitials;
 
   return (
     <div
       className={cn(
-        "relative flex items-center justify-center rounded-full overflow-hidden transition-shadow duration-200",
+        "relative flex items-center justify-center rounded-full overflow-hidden transition-shadow duration-200 flex-shrink-0 aspect-square",
         sizeStyles[size],
         variantStyles[variant],
         hoverStyles[variant],
-        className,
+        className
       )}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -86,21 +86,34 @@ export function Avatar({
       {showInitials && <span className="font-medium">{initials}</span>}
       {showFallback &&
         (fallback || (
-          <User className={cn("w-1/2 h-1/2", variant === "empty" ? "text-gray-400" : "text-text-inverted")} />
+          <User
+            className={cn(
+              "w-1/2 h-1/2",
+              variant === "empty" ? "text-gray-400" : "text-text-inverted"
+            )}
+          />
         ))}
     </div>
-  )
+  );
 }
 
 interface AvatarGroupProps extends React.HTMLAttributes<HTMLDivElement> {
-  children: React.ReactNode
-  max?: number
-  className?: string
+  children: React.ReactNode;
+  max?: number;
+  className?: string;
 }
 
-export function AvatarGroup({ children, max, className, ...props }: AvatarGroupProps) {
-  const childrenArray = React.Children.toArray(children)
-  const excess = max !== undefined && childrenArray.length > max ? childrenArray.length - max : 0
+export function AvatarGroup({
+  children,
+  max,
+  className,
+  ...props
+}: AvatarGroupProps) {
+  const childrenArray = React.Children.toArray(children);
+  const excess =
+    max !== undefined && childrenArray.length > max
+      ? childrenArray.length - max
+      : 0;
 
   return (
     <div className={cn("flex -space-x-2", className)} {...props}>
@@ -119,12 +132,12 @@ export function AvatarGroup({ children, max, className, ...props }: AvatarGroupP
         <div
           className={cn(
             "relative flex items-center justify-center rounded-full bg-gray-100 text-gray-600 w-8 h-8 text-xs",
-            sizeStyles[childrenArray[0]?.props?.size || "48"],
+            sizeStyles[childrenArray[0]?.props?.size || "48"]
           )}
         >
           +{excess}
         </div>
       )}
     </div>
-  )
+  );
 }
