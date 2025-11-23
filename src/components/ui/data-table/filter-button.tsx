@@ -310,7 +310,7 @@ export function FilterButton<
               value={searchInput}
             />
           </div>
-          <div className="max-h-60 overflow-y-auto p-2">
+          <div className="max-h-[60vh] overflow-y-auto p-2">
             {currentOptions.map((option) => (
               <div
                 key={option.value}

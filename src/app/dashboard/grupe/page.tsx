@@ -26,6 +26,7 @@ import {
   UserCircle,
   Check,
   ChevronDown,
+  SlidersHorizontal,
 } from "lucide-react";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { Select } from "@/components/ui/select";
@@ -357,6 +358,7 @@ function GroupMentorForm({ groupId, initialMentorId }: GroupMentorFormProps) {
 
 export default function GrupePage() {
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [columnVisibility, setColumnVisibility] = useState<
     Record<string, boolean>
   >({});
@@ -579,7 +581,7 @@ export default function GrupePage() {
 
   return (
     <SidebarProvider>
-      <div className="flex h-[calc(100vh-11rem)]">
+      <div className="flex h-[calc(100vh-15rem)]">
         {/* Sidebar for groups - Hidden on mobile */}
         <div className="hidden md:block">
           <InfiniteGroupsSidebar
@@ -589,7 +591,19 @@ export default function GrupePage() {
           />
         </div>
         {/* Main content */}
-        <div className="flex-1 overflow-auto w-full min-w-0 p-4 md:p-0">
+        <div className="flex-1 overflow-y-auto w-full min-w-0 max-w-full p-4 md:p-0">
+          {/* Mobile sticky filter button - appears first on mobile */}
+          {isMobile && (
+            <div className="sticky top-0 z-40 bg-white -mx-4 px-4 pt-0">
+              <Button
+                onClick={() => setMobileFiltersOpen(true)}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center gap-2 mb-4"
+              >
+                <SlidersHorizontal className="h-5 w-5" />
+                FILTRE
+              </Button>
+            </div>
+          )}
           {/* Mobile Groups Dropdown - Only on mobile, above filters */}
           {isMobile && (
             <div className="mb-4">
@@ -656,7 +670,6 @@ export default function GrupePage() {
               </Popover>
             </div>
           )}
-
           {/* Header with title and actions */}
           <div className="flex flex-col gap-4 mb-6">
             <div className="flex flex-col">
@@ -736,6 +749,9 @@ export default function GrupePage() {
               useController={useGroupMembersController}
               filters={tableFilters}
               enableRowSelection={true}
+              hideMobileFilterButton={true}
+              mobileFiltersOpen={mobileFiltersOpen}
+              setMobileFiltersOpen={setMobileFiltersOpen}
               visibleColumnsConfig={{
                 initialVisibleColumns: columnVisibility,
                 columnDefinitions: [

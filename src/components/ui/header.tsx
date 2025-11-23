@@ -10,7 +10,7 @@ import { Notification } from "@/components/ui/notification";
 import { Separator } from "@/components/ui/separator";
 import { UserPopover } from "@/components/ui/user-popover";
 
-const headerVariants = cva("w-full shadow-xs bg-white relative z-30", {
+const headerVariants = cva("w-full shadow-xs bg-white sticky top-0 z-30", {
   variants: {
     variant: {
       default: "",

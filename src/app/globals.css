@@ -123,4 +123,9 @@
     font-size: 0.75rem;
     line-height: 1.5;
   }
+
+  /* Nomenclator specific - adjust sticky filter button position */
+  [data-page="nomenclator"] .top-16 {
+    top: 5rem;
+  }
 }

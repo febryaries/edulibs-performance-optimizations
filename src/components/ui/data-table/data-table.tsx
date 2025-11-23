@@ -119,6 +119,9 @@ interface DataTableProps<
   refetchKey?: string; // Key for the refetch context
   cursors?: string[]; // Cursors for pagination
   renderCard?: (row: TData) => React.ReactNode; // Custom card renderer for mobile
+  hideMobileFilterButton?: boolean; // Hide the mobile filter button
+  mobileFiltersOpen?: boolean; // External state for mobile filters
+  setMobileFiltersOpen?: (open: boolean) => void; // External state setter for mobile filters
 }
 
 // Define custom column meta type
@@ -158,6 +161,9 @@ export function DataTable<
   searchColumns = [],
   refetchKey = "data-table",
   renderCard,
+  hideMobileFilterButton = false,
+  mobileFiltersOpen: externalMobileFiltersOpen,
+  setMobileFiltersOpen: externalSetMobileFiltersOpen,
 }: DataTableProps<TData, TValue, C, M>) {
   // Check if we're on mobile
   const isMobile = useMediaQuery("(max-width: 768px)");
@@ -202,7 +208,12 @@ export function DataTable<
   const [resetKey, setResetKey] = useState(0);
 
   // Mobile filters dialog state
-  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const [internalMobileFiltersOpen, setInternalMobileFiltersOpen] =
+    useState(false);
+  const mobileFiltersOpen =
+    externalMobileFiltersOpen ?? internalMobileFiltersOpen;
+  const setMobileFiltersOpen =
+    externalSetMobileFiltersOpen ?? setInternalMobileFiltersOpen;
 
   // Initialize column visibility on mount
   useEffect(() => {
@@ -712,8 +723,8 @@ export function DataTable<
   return (
     <div className={cn("space-y-4", className)}>
       {/* Sticky Filter Button (Mobile Only) */}
-      {isMobile && (
-        <div className="sticky top-0 z-50 bg-white -mx-4 px-4 mb-4">
+      {isMobile && !hideMobileFilterButton && (
+        <div className="sticky top-16 z-50 bg-white -mx-4 px-4 mb-4">
           <Button
             onClick={() => setMobileFiltersOpen(true)}
             className="w-full bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center gap-2"
@@ -727,7 +738,7 @@ export function DataTable<
       {/* Filters Section - Hide on mobile, show in dialog instead. Sticky on desktop */}
       <div
         className={cn(
-          "mb-6 space-y-4 sticky top-0 z-40 bg-white pb-4 -mx-6 px-6",
+          "mb-6 space-y-4 sticky top-16 z-40 bg-white pb-4 -mx-6 px-6 pt-4",
           isMobile && "hidden"
         )}
       >
@@ -985,7 +996,7 @@ export function DataTable<
       {/* Mobile Filters Dialog */}
       {isMobile && (
         <Dialog open={mobileFiltersOpen} onOpenChange={setMobileFiltersOpen}>
-          <DialogContent className="max-w-lg w-[95%] max-h-[90vh] p-4 overflow-y-auto bg-white top-[5%] translate-y-0">
+          <DialogContent className="max-w-lg w-[95%] max-h-[95vh] p-4 overflow-visible bg-white top-[2.5%] translate-y-0">
             <DialogHeader className="mb-4">
               <DialogTitle className="text-lg font-semibold">
                 Filtre
