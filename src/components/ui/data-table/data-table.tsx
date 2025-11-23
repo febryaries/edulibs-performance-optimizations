@@ -921,7 +921,7 @@ export function DataTable<
         <div className="border rounded-md overflow-hidden">
           <div className="relative overflow-x-auto">
             <table className="w-full text-sm text-left text-gray-500">
-              <thead className="text-xs text-gray-700 bg-gray-50">
+              <thead className="text-xs text-white bg-blue-600">
                 <tr>
                   {enableRowSelection && (
                     <th className="px-4 py-3 w-10">
