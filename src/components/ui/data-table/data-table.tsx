@@ -588,9 +588,9 @@ export function DataTable<
 
     // Simple pagination that matches the screenshots
     return (
-      <div className="flex flex-col sm:flex-row items-center justify-between bg-gray-50 px-4 py-3">
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-500">
+      <div className="flex flex-col gap-3 sm:flex-row items-center justify-between bg-gray-50 px-2 sm:px-4 py-3">
+        <div className="flex items-center gap-2 text-center sm:text-left w-full sm:w-auto">
+          <span className="text-xs sm:text-sm text-gray-500">
             {count !== undefined && count !== null
               ? `${count?.toLocaleString()} ${rowCountText}`
               : `${table
@@ -599,23 +599,23 @@ export function DataTable<
           </span>
         </div>
 
-        <div className="flex items-center space-x-2 justify-center mx-auto">
+        <div className="flex items-center space-x-1 sm:space-x-2 justify-center w-full sm:w-auto">
           <Button
             variant="outline"
             size="sm"
-            className="flex items-center gap-1 h-8 w-8 p-0"
+            className="flex items-center gap-1 h-7 w-7 sm:h-8 sm:w-8 p-0 shrink-0"
             onClick={goToPreviousPage}
             disabled={pageIndex === 0}
           >
-            <ChevronLeft className="h-4 w-4" />
+            <ChevronLeft className="h-3 w-3 sm:h-4 sm:w-4" />
           </Button>
 
-          {/* First page button */}
+          {/* First page button - hide on very small screens if far from current */}
           {pageIndex > 1 && (
             <Button
               size="sm"
               variant="outline"
-              className="h-8 w-8 p-0"
+              className="h-7 w-7 sm:h-8 sm:w-8 p-0 text-xs sm:text-sm shrink-0 hidden sm:flex"
               onClick={() => goToPage(0)}
             >
               1
@@ -623,14 +623,16 @@ export function DataTable<
           )}
 
           {/* Previous page button (if not on first or second page) */}
-          {pageIndex > 2 && <span className="text-gray-500">...</span>}
+          {pageIndex > 2 && (
+            <span className="text-gray-500 text-xs hidden sm:inline">...</span>
+          )}
 
           {/* Previous page button (if not on first page) */}
           {pageIndex > 0 && (
             <Button
               size="sm"
               variant="outline"
-              className="h-8 w-8 p-0"
+              className="h-7 w-7 sm:h-8 sm:w-8 p-0 text-xs sm:text-sm shrink-0"
               onClick={() => goToPage(pageIndex - 1)}
             >
               {pageIndex}
@@ -641,7 +643,7 @@ export function DataTable<
           <Button
             size="sm"
             variant="primary"
-            className="h-8 w-8 p-0 bg-blue-500 text-white"
+            className="h-7 w-7 sm:h-8 sm:w-8 p-0 bg-blue-500 text-white text-xs sm:text-sm shrink-0"
             disabled
           >
             {pageIndex + 1}
@@ -652,7 +654,7 @@ export function DataTable<
             <Button
               size="sm"
               variant="outline"
-              className="h-8 w-8 p-0"
+              className="h-7 w-7 sm:h-8 sm:w-8 p-0 text-xs sm:text-sm shrink-0"
               onClick={() => goToPage(pageIndex + 1)}
             >
               {pageIndex + 2}
@@ -661,7 +663,7 @@ export function DataTable<
 
           {/* Ellipsis before last page (if needed) */}
           {pageIndex < totalPages - 3 && totalPages > 3 && (
-            <span className="text-gray-500">...</span>
+            <span className="text-gray-500 text-xs hidden sm:inline">...</span>
           )}
 
           {/* Last page button (if not already showing and we know there are more pages) */}
@@ -669,7 +671,7 @@ export function DataTable<
             <Button
               size="sm"
               variant="outline"
-              className="h-8 w-8 p-0"
+              className="h-7 w-7 sm:h-8 sm:w-8 p-0 text-xs sm:text-sm shrink-0 hidden sm:flex"
               onClick={() => goToPage(totalPages - 1)}
             >
               {totalPages}
@@ -679,20 +681,20 @@ export function DataTable<
           <Button
             variant="outline"
             size="sm"
-            className="flex items-center gap-1 h-8 w-8 p-0"
+            className="flex items-center gap-1 h-7 w-7 sm:h-8 sm:w-8 p-0 shrink-0"
             onClick={goToNextPage}
             disabled={pageIndex >= totalPages - 1 || !query.data?.nextCursor}
           >
-            <ChevronRight className="h-4 w-4" />
+            <ChevronRight className="h-3 w-3 sm:h-4 sm:w-4" />
           </Button>
         </div>
 
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-500">
+        <div className="flex items-center gap-2 w-full sm:w-auto justify-center sm:justify-end">
+          <span className="text-xs sm:text-sm text-gray-500 whitespace-nowrap">
             {rowCountText} pe pagină
           </span>
           <select
-            className="h-8 rounded border-gray-300 text-sm"
+            className="h-7 sm:h-8 rounded border-gray-300 text-xs sm:text-sm px-2"
             value={pageSize}
             onChange={(e) => changePageSize(Number(e.target.value))}
           >
@@ -895,11 +897,13 @@ export function DataTable<
 
       {/* Mobile Card View or Desktop Table View */}
       {isMobile ? (
-        <div className="space-y-4 overflow-x-hidden">
+        <div className="space-y-4 -mx-4 px-4 overflow-x-hidden">
           {renderMobileCards()}
 
           {/* Pagination for mobile */}
-          {enablePagination && renderPagination()}
+          {enablePagination && (
+            <div className="-mx-4">{renderPagination()}</div>
+          )}
         </div>
       ) : (
         /* Table for desktop */

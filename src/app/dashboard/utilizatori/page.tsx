@@ -1,33 +1,59 @@
-"use client"
+"use client";
 
-import { useEffect, useState, useMemo } from "react"
-import { PlusCircle, Edit, Copy, Trash2, UserIcon, CalendarIcon, GraduationCapIcon, MoreHorizontal, Ban, CheckCircle, RefreshCw, Upload } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Avatar } from "@/components/ui/avatar"
-import { DataTable, type Filter } from "@/components/ui/data-table/data-table"
-import { type ColumnDef } from "@tanstack/react-table"
-import { format } from "date-fns"
-import { ro } from "date-fns/locale"
-import { useUsersCrud, useGroupsCrud, useUsersController, UserRole } from "@/hooks/use-controllers"
-import { AddUserDialog } from "@/components/users/add-user-dialog"
-import { toast } from "sonner"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { AddBulkUserDialog } from "@/components/users/add-bulk-user-dialog"
-import { useAuth } from "@/lib/auth-context"
-import pLimit from 'p-limit';
+import { useEffect, useState, useMemo } from "react";
+import {
+  PlusCircle,
+  Edit,
+  Copy,
+  Trash2,
+  UserIcon,
+  CalendarIcon,
+  GraduationCapIcon,
+  MoreHorizontal,
+  Ban,
+  CheckCircle,
+  RefreshCw,
+  Upload,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Avatar } from "@/components/ui/avatar";
+import { Card, CardContent } from "@/components/ui/card";
+import { DataTable, type Filter } from "@/components/ui/data-table/data-table";
+import { type ColumnDef } from "@tanstack/react-table";
+import { format } from "date-fns";
+import { ro } from "date-fns/locale";
+import {
+  useUsersCrud,
+  useGroupsCrud,
+  useUsersController,
+  UserRole,
+} from "@/hooks/use-controllers";
+import { AddUserDialog } from "@/components/users/add-user-dialog";
+import { toast } from "sonner";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { AddBulkUserDialog } from "@/components/users/add-bulk-user-dialog";
+import { useAuth } from "@/lib/auth-context";
+import pLimit from "p-limit";
 
 export default function UtilizatoriPage() {
-  const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>({})
-  const [isAddUserDialogOpen, setIsAddUserDialogOpen] = useState(false)
-  const [isBulkAddUsersDialogOpen, setIsBulkAddUsersDialogOpen] = useState(false)
+  const [columnVisibility, setColumnVisibility] = useState<
+    Record<string, boolean>
+  >({});
+  const [isAddUserDialogOpen, setIsAddUserDialogOpen] = useState(false);
+  const [isBulkAddUsersDialogOpen, setIsBulkAddUsersDialogOpen] =
+    useState(false);
   const userController = useUsersController();
 
   // Use auth context for inviting users
-  const { inviteUser } = useAuth()
+  const { inviteUser } = useAuth();
 
   // Controller configs for dropdowns
-  const { useList: useUsers } = useUsersCrud()
-  
+  const { useList: useUsers } = useUsersCrud();
+
   // Table filters for DataTable
   const tableFilters: Filter[] = [
     {
@@ -42,51 +68,53 @@ export default function UtilizatoriPage() {
         { value: "STUDENT", label: "Student" },
       ],
       icon: <UserIcon className="h-4 w-4 text-gray-400" />,
-      queryColumn: "role"
-    }
-  ]
+      queryColumn: "role",
+    },
+  ];
 
   // Handle adding a new user
   const handleAddUser = async (email: string, roles: string[]) => {
     try {
       if (roles.length === 0) {
-        toast.error("Trebuie să selectezi cel puțin un rol")
-        return
+        toast.error("Trebuie să selectezi cel puțin un rol");
+        return;
       }
 
       // Use the primary role (first in the array)
-      const primaryRole = roles[0] as UserRole
+      const primaryRole = roles[0] as UserRole;
 
       // Invite the user using the auth context function
-      const success = await inviteUser(email, primaryRole)
+      const success = await inviteUser(email, primaryRole);
 
       if (success) {
-        toast.success("Utilizator invitat cu succes")
-        setIsAddUserDialogOpen(false)
+        toast.success("Utilizator invitat cu succes");
+        setIsAddUserDialogOpen(false);
       }
     } catch (error) {
-      console.error("Error adding user:", error)
-      toast.error("Eroare la invitarea utilizatorului")
+      console.error("Error adding user:", error);
+      toast.error("Eroare la invitarea utilizatorului");
     }
-  }
+  };
 
   const handleAddUsers = async (users: any[]) => {
     try {
       let successCount = 0;
       let existingCount = 0;
       let errorCount = 0;
-  
-      const validUsers = users.filter(user => user.email && user.role);
-   
-      for(let i = 0; i < validUsers.length; i++) {
+
+      const validUsers = users.filter((user) => user.email && user.role);
+
+      for (let i = 0; i < validUsers.length; i++) {
         const user = validUsers[i];
         try {
           const existingUser = await userController.findOneByFilter({
-            filters: [{
-              column: "email",
-              operator: "eq",
-              value: user.email
-            }]
+            filters: [
+              {
+                column: "email",
+                operator: "eq",
+                value: user.email,
+              },
+            ],
           });
 
           if (existingUser) {
@@ -96,14 +124,14 @@ export default function UtilizatoriPage() {
             continue;
           }
           await inviteUser(user.email, user.role);
-          await new Promise(resolve => setTimeout(resolve, 500)); 
+          await new Promise((resolve) => setTimeout(resolve, 500));
           successCount++;
         } catch (err) {
           console.error(`Error processing user ${user.email}:`, err);
           errorCount++;
         }
       }
-  
+
       if (successCount > 0) {
         toast.success(`${successCount} utilizatori invitați cu succes`);
       }
@@ -113,7 +141,7 @@ export default function UtilizatoriPage() {
       if (errorCount > 0) {
         toast.error(`${errorCount} utilizatori nu au putut fi invitați`);
       }
-  
+
       setIsBulkAddUsersDialogOpen(false);
     } catch (error) {
       console.error("Error adding users:", error);
@@ -123,21 +151,33 @@ export default function UtilizatoriPage() {
 
   // Generate a color based on a string
   const getColorFromString = (str: string) => {
-    const colors = ['#4F7FFF', '#4CAF50', '#FF9800', '#E91E63', '#9C27B0', '#3F51B5']
-    const index = str.charCodeAt(0) % colors.length
-    return colors[index]
-  }
+    const colors = [
+      "#4F7FFF",
+      "#4CAF50",
+      "#FF9800",
+      "#E91E63",
+      "#9C27B0",
+      "#3F51B5",
+    ];
+    const index = str.charCodeAt(0) % colors.length;
+    return colors[index];
+  };
 
   // Generate initials from a name
-  const getInitials = (firstName?: string | null, lastName?: string | null, email?: string) => {
-    const fullName = `${firstName || ''} ${lastName || ''}`.trim() || email || ''
+  const getInitials = (
+    firstName?: string | null,
+    lastName?: string | null,
+    email?: string
+  ) => {
+    const fullName =
+      `${firstName || ""} ${lastName || ""}`.trim() || email || "";
     return fullName
-      .split(' ')
-      .map(part => part.charAt(0))
-      .join('')
+      .split(" ")
+      .map((part) => part.charAt(0))
+      .join("")
       .toUpperCase()
-      .substring(0, 2)
-  }
+      .substring(0, 2);
+  };
 
   // Define columns for the data table
   const columns: ColumnDef<any>[] = [
@@ -169,34 +209,46 @@ export default function UtilizatoriPage() {
     {
       accessorKey: "nume",
       header: "Nume",
-      accessorFn: (user) => `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email,
+      accessorFn: (user) =>
+        `${user.first_name || ""} ${user.last_name || ""}`.trim() || user.email,
       cell: ({ row }) => {
-        const user = row.original
-        const initials = getInitials(user.first_name, user.last_name, user.email)
-        const color = getColorFromString(user.id)
+        const user = row.original;
+        const initials = getInitials(
+          user.first_name,
+          user.last_name,
+          user.email
+        );
+        const color = getColorFromString(user.id);
         return (
           <div className="flex items-center gap-3">
             <Avatar className="h-8 w-8" style={{ backgroundColor: color }}>
               <span className="text-xs font-medium text-white">{initials}</span>
             </Avatar>
-            <div className="font-medium">{`${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email}</div>
+            <div className="font-medium">
+              {`${user.first_name || ""} ${user.last_name || ""}`.trim() ||
+                user.email}
+            </div>
           </div>
-        )
+        );
       },
     },
     {
       accessorKey: "email",
       header: "Email",
-      accessorFn: (user) => user.email || '',
+      accessorFn: (user) => user.email || "",
     },
     {
       accessorKey: "status",
       header: "Status",
-      accessorFn: (user) => user.status || 'activ',
+      accessorFn: (user) => user.status || "activ",
       cell: ({ row }) => {
-        const status = row.getValue("status") as string || 'activ';
+        const status = (row.getValue("status") as string) || "activ";
         return (
-          <div className={`px-2 py-1 rounded-full text-xs font-medium inline-block ${getStatusClass(status)}`}>
+          <div
+            className={`px-2 py-1 rounded-full text-xs font-medium inline-block ${getStatusClass(
+              status
+            )}`}
+          >
             {status.charAt(0).toUpperCase() + status.slice(1).toLowerCase()}
           </div>
         );
@@ -213,7 +265,7 @@ export default function UtilizatoriPage() {
             <GraduationCapIcon className="h-4 w-4 text-gray-500" />
             <span>N/A</span>
           </div>
-        )
+        );
       },
     },
     {
@@ -221,10 +273,8 @@ export default function UtilizatoriPage() {
       header: "Rol",
       accessorFn: (user) => user.role,
       cell: ({ row }) => {
-        const role = row.getValue("rol") as string
-        return (
-          <div className="capitalize">{role.toLowerCase()}</div>
-        )
+        const role = row.getValue("rol") as string;
+        return <div className="capitalize">{role.toLowerCase()}</div>;
       },
     },
     {
@@ -232,38 +282,39 @@ export default function UtilizatoriPage() {
       header: "Data",
       accessorFn: (user) => user.created_at,
       cell: ({ row }) => {
-        const date = row.getValue("data") as string
+        const date = row.getValue("data") as string;
         return (
           <div className="flex items-center gap-1">
             <CalendarIcon className="h-4 w-4 text-gray-500" />
-            <span>{format(new Date(date), 'dd MMM yyyy', { locale: ro })}</span>
+            <span>{format(new Date(date), "dd MMM yyyy", { locale: ro })}</span>
           </div>
-        )
+        );
       },
     },
     {
       id: "actions",
       header: "Acțiuni",
       cell: ({ row }) => {
-        const user = row.original
-        const status = user.status?.toLowerCase() || 'activ'
-        const { updateUserStatus, resendInvitation, removeInvitedUser } = useAuth()
+        const user = row.original;
+        const status = user.status?.toLowerCase() || "activ";
+        const { updateUserStatus, resendInvitation, removeInvitedUser } =
+          useAuth();
 
         const handleStatusChange = async () => {
-          if (status === 'active' || status === 'activ') {
-            await updateUserStatus(user.id, 'INACTIVE')
-          } else if (status === 'inactive' || status === 'inactiv') {
-            await updateUserStatus(user.id, 'ACTIVE')
+          if (status === "active" || status === "activ") {
+            await updateUserStatus(user.id, "INACTIVE");
+          } else if (status === "inactive" || status === "inactiv") {
+            await updateUserStatus(user.id, "ACTIVE");
           }
-        }
+        };
 
         const handleResendInvitation = async () => {
-          await resendInvitation(user.email)
-        }
+          await resendInvitation(user.email);
+        };
 
         const handleRemoveUser = async () => {
-          await removeInvitedUser(user.id)
-        }
+          await removeInvitedUser(user.id);
+        };
 
         return (
           <div className="flex items-center gap-2">
@@ -275,7 +326,7 @@ export default function UtilizatoriPage() {
               </PopoverTrigger>
               <PopoverContent className="w-48 p-0" align="end">
                 <div className="py-1">
-                  {(status === 'active' || status === 'activ') && (
+                  {(status === "active" || status === "activ") && (
                     <button
                       onClick={handleStatusChange}
                       className="flex w-full items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
@@ -284,7 +335,7 @@ export default function UtilizatoriPage() {
                       Dezactivează
                     </button>
                   )}
-                  {(status === 'inactive' || status === 'inactiv') && (
+                  {(status === "inactive" || status === "inactiv") && (
                     <button
                       onClick={handleStatusChange}
                       className="flex w-full items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
@@ -293,7 +344,7 @@ export default function UtilizatoriPage() {
                       Activează
                     </button>
                   )}
-                  {status === 'invited' && (
+                  {status === "invited" && (
                     <>
                       <button
                         onClick={handleResendInvitation}
@@ -315,38 +366,106 @@ export default function UtilizatoriPage() {
               </PopoverContent>
             </Popover>
           </div>
-        )
+        );
       },
     },
-  ]
+  ];
 
   // Get status styles for the status badges
   const getStatusClass = (status: string) => {
-    return getStatusStyles(status)
-  }
+    return getStatusStyles(status);
+  };
+
+  // Render card for mobile view
+  const renderUserCard = (user: any) => {
+    const initials = getInitials(user.first_name, user.last_name, user.email);
+    const color = getColorFromString(user.id);
+    const status = user.status?.toLowerCase() || "activ";
+    const fullName =
+      `${user.first_name || ""} ${user.last_name || ""}`.trim() || user.email;
+
+    return (
+      <Card className="cursor-pointer hover:shadow-md transition-shadow mb-3">
+        <CardContent className="p-4">
+          {/* Header: Avatar + Name */}
+          <div className="flex items-center gap-3 mb-3">
+            <Avatar
+              className="h-10 w-10 shrink-0"
+              style={{ backgroundColor: color }}
+            >
+              <span className="text-sm font-medium text-white">{initials}</span>
+            </Avatar>
+            <div className="flex-1 min-w-0">
+              <h3 className="font-semibold text-base truncate">{fullName}</h3>
+              <p className="text-sm text-gray-600 truncate">{user.email}</p>
+            </div>
+          </div>
+
+          {/* Details */}
+          <div className="space-y-2 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-gray-500">Rol:</span>
+              <span className="font-medium capitalize">
+                {user.role?.toLowerCase()}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-gray-500">Status:</span>
+              <div
+                className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusClass(
+                  status
+                )}`}
+              >
+                {status.charAt(0).toUpperCase() + status.slice(1).toLowerCase()}
+              </div>
+            </div>
+            <div className="flex items-center justify-between text-gray-500">
+              <div className="flex items-center gap-1">
+                <CalendarIcon className="h-4 w-4" />
+                <span>Data:</span>
+              </div>
+              <span>
+                {format(new Date(user.created_at), "dd MMM yyyy", {
+                  locale: ro,
+                })}
+              </span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
 
   return (
-    <div className="container mx-auto py-6 px-4 md:px-6">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Utilizatori</h1>
-        <div className="flex items-center gap-2">
+    <div className="p-4 md:p-0 space-y-4">
+      {/* Header with title and actions */}
+      <div className="flex flex-col gap-4 mb-6">
+        <div className="flex flex-col">
+          <h1 className="text-xl md:text-2xl font-bold truncate">
+            Utilizatori
+          </h1>
+        </div>
+        <div className="flex flex-col gap-2 md:flex-row md:flex-wrap md:gap-2">
           <Button
-            className="flex items-center gap-1"
             variant="outline"
-            onClick={() => { setIsBulkAddUsersDialogOpen(true) }}
+            className="flex items-center justify-center w-full md:w-auto md:flex-1"
+            onClick={() => {
+              setIsBulkAddUsersDialogOpen(true);
+            }}
           >
-            <Upload className="h-4 w-4" />
-            Adaugă în masă
+            <Upload className="h-4 w-4 mr-2" />
+            <span className="truncate">Adaugă în masă</span>
           </Button>
           <Button
-            className="flex items-center gap-1"
+            className="flex items-center justify-center w-full md:w-auto md:flex-1"
             onClick={() => setIsAddUserDialogOpen(true)}
           >
-            <PlusCircle className="h-4 w-4" />
-            Adaugă utilizator
+            <PlusCircle className="h-4 w-4 mr-2" />
+            <span className="truncate">Adaugă utilizator</span>
           </Button>
         </div>
       </div>
+
       <div className="space-y-4">
         <DataTable
           columns={columns}
@@ -354,7 +473,7 @@ export default function UtilizatoriPage() {
           useController={useUsersController}
           filters={tableFilters}
           enableRowSelection={true}
-          searchColumns={['email', 'first_name', 'last_name']}
+          searchColumns={["email", "first_name", "last_name"]}
           rowCountText="utilizatori"
           visibleColumnsConfig={{
             initialVisibleColumns: columnVisibility,
@@ -363,8 +482,9 @@ export default function UtilizatoriPage() {
               { id: "email", label: "Email" },
               { id: "role", label: "Rol" },
             ],
-            onVisibilityChange: setColumnVisibility
+            onVisibilityChange: setColumnVisibility,
           }}
+          renderCard={renderUserCard}
         />
       </div>
 
@@ -381,9 +501,8 @@ export default function UtilizatoriPage() {
         onOpenChange={setIsBulkAddUsersDialogOpen}
         onAddUsers={handleAddUsers}
       />
-
     </div>
-  )
+  );
 }
 
 // Helper function to get status styles
@@ -391,16 +510,16 @@ function getStatusStyles(status: string): string {
   switch (status.toLowerCase()) {
     case "active":
     case "activ":
-      return "bg-green-50 text-green-700 border border-green-200"
+      return "bg-green-50 text-green-700 border border-green-200";
     case "inactive":
     case "inactiv":
-      return "bg-gray-50 text-gray-700 border border-gray-200"
+      return "bg-gray-50 text-gray-700 border border-gray-200";
     case "suspended":
     case "suspendat":
-      return "bg-red-50 text-red-700 border border-red-200"
+      return "bg-red-50 text-red-700 border border-red-200";
     case "invited":
-      return "bg-blue-50 text-blue-700 border border-blue-200"
+      return "bg-blue-50 text-blue-700 border border-blue-200";
     default:
-      return "bg-gray-50 text-gray-700 border border-gray-200"
+      return "bg-gray-50 text-gray-700 border border-gray-200";
   }
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import type React from "react";
+import { useState } from "react";
 
 import { Header } from "@/components/ui/header";
 import { Footer } from "@/components/ui/footer";
@@ -15,8 +16,17 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }>) {
   const { menuItems } = useMenu();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const handleMobileMenuToggle = (isOpen: boolean) => {
+    setMobileMenuOpen(isOpen);
+  };
+
+  const closeMobileMenu = () => {
+    setMobileMenuOpen(false);
+  };
   return (
-    <div className="min-h-screen flex flex-col bg-lightest dark:bg-lightest overflow-x-hidden">
+    <div className="min-h-screen flex flex-col bg-lightest dark:bg-lightest">
       {/* Header */}
       <Header
         logo={
@@ -26,6 +36,8 @@ export default function DashboardLayout({
         }
         notificationCount={7}
         userInitials="LR"
+        mobileMenuOpen={mobileMenuOpen}
+        onMobileMenuToggle={handleMobileMenuToggle}
         mobileMenuContent={
           <div className="flex flex-col space-y-2">
             {menuItems.map((item) => (
@@ -36,6 +48,7 @@ export default function DashboardLayout({
                 icon={item.icon}
                 count={item.count}
                 className="w-full"
+                onLinkClick={closeMobileMenu}
               >
                 {item.label}
               </HeaderLink>
@@ -59,9 +72,9 @@ export default function DashboardLayout({
       </Header>
 
       {/* Main content */}
-      <div className="flex flex-1 relative z-10 overflow-x-hidden">
+      <div className="flex flex-1 relative z-10">
         {/* Page content */}
-        <main className="flex-1 p-4 md:p-6 overflow-x-hidden">{children}</main>
+        <main className="flex-1 p-0 md:p-6 w-full max-w-full">{children}</main>
       </div>
 
       {/* Footer */}

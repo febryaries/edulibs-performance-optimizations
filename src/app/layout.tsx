@@ -1,6 +1,6 @@
 import "./globals.css";
 import type { Metadata } from "next";
-import { Inter } from "next/font/google"
+import { Inter } from "next/font/google";
 import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from "next-themes";
 import { QueryProvider } from "@/lib/query-provider";
@@ -15,15 +15,15 @@ const inter = Inter({
   weight: ["400", "500", "600", "700"],
   display: "swap",
   variable: "--font-inter",
-})
+});
 
 export const metadata: Metadata = {
   title: "EDU Apps",
   description: "EDU Apps",
   icons: {
-    icon: "/favicon.png"
+    icon: "/favicon.png",
   },
-}
+};
 
 export default function RootLayout({
   children,
@@ -38,7 +38,11 @@ export default function RootLayout({
         <QueryProvider>
           <AuthProvider>
             <RefetchProvider>
-              <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
+              <ThemeProvider
+                attribute="class"
+                defaultTheme="light"
+                enableSystem={false}
+              >
                 <AuthRedirectGuard />
                 {children}
                 <Toaster />

@@ -1,14 +1,14 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import Link from "next/link"
-import { Menu } from "lucide-react"
-import { cva, type VariantProps } from "class-variance-authority"
-import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
-import { Notification } from "@/components/ui/notification"
-import { Separator } from "@/components/ui/separator"
-import { UserPopover } from "@/components/ui/user-popover"
+import * as React from "react";
+import Link from "next/link";
+import { Menu } from "lucide-react";
+import { cva, type VariantProps } from "class-variance-authority";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Notification } from "@/components/ui/notification";
+import { Separator } from "@/components/ui/separator";
+import { UserPopover } from "@/components/ui/user-popover";
 
 const headerVariants = cva("w-full shadow-xs bg-white relative z-30", {
   variants: {
@@ -27,18 +27,21 @@ const headerVariants = cva("w-full shadow-xs bg-white relative z-30", {
     variant: "default",
     size: "md",
   },
-})
+});
 
-export interface HeaderProps extends React.HTMLAttributes<HTMLElement>, VariantProps<typeof headerVariants> {
-  logo?: React.ReactNode
-  showMobileMenu?: boolean
-  onMobileMenuToggle?: (isOpen: boolean) => void
-  notificationCount?: number
-  onNotificationClick?: () => void
-  userInitials?: string
-  avatarColor?: string
-  mobileMenuContent?: React.ReactNode
-  children?: React.ReactNode
+export interface HeaderProps
+  extends React.HTMLAttributes<HTMLElement>,
+    VariantProps<typeof headerVariants> {
+  logo?: React.ReactNode;
+  showMobileMenu?: boolean;
+  mobileMenuOpen?: boolean;
+  onMobileMenuToggle?: (isOpen: boolean) => void;
+  notificationCount?: number;
+  onNotificationClick?: () => void;
+  userInitials?: string;
+  avatarColor?: string;
+  mobileMenuContent?: React.ReactNode;
+  children?: React.ReactNode;
 }
 
 export function Header({
@@ -47,6 +50,7 @@ export function Header({
   size,
   logo,
   showMobileMenu = true,
+  mobileMenuOpen: controlledMobileMenuOpen,
   onMobileMenuToggle,
   notificationCount,
   onNotificationClick,
@@ -56,19 +60,31 @@ export function Header({
   children,
   ...props
 }: HeaderProps) {
-  const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false)
+  const [internalMobileMenuOpen, setInternalMobileMenuOpen] =
+    React.useState(false);
+
+  // Use controlled state if provided, otherwise use internal state
+  const mobileMenuOpen =
+    controlledMobileMenuOpen !== undefined
+      ? controlledMobileMenuOpen
+      : internalMobileMenuOpen;
 
   const toggleMobileMenu = () => {
-    const newState = !mobileMenuOpen
-    setMobileMenuOpen(newState)
-    onMobileMenuToggle?.(newState)
-  }
+    const newState = !mobileMenuOpen;
+    if (controlledMobileMenuOpen === undefined) {
+      setInternalMobileMenuOpen(newState);
+    }
+    onMobileMenuToggle?.(newState);
+  };
 
   // Determine notification size based on header size
-  const notificationSize = size === "lg" ? "lg" : size === "md" ? "md" : "sm"
+  const notificationSize = size === "lg" ? "lg" : size === "md" ? "md" : "sm";
 
   return (
-    <header className={cn(headerVariants({ variant, size }), className)} {...props}>
+    <header
+      className={cn(headerVariants({ variant, size }), className)}
+      {...props}
+    >
       <div className="h-full flex items-center justify-between px-4 md:px-6 lg:px-8">
         {/* Left side - Logo and hamburger menu */}
         <div className="flex items-center gap-2 md:gap-4">
@@ -86,9 +102,16 @@ export function Header({
           )}
 
           {/* Logo */}
-          {logo && <div className="flex-shrink-0 text-[#4F7FFF] font-bold text-xl">{logo}</div>}
+          {logo && (
+            <div className="flex-shrink-0 text-[#4F7FFF] font-bold text-xl">
+              {logo}
+            </div>
+          )}
 
-          <Separator orientation="vertical" className="hidden md:block mx-4 h-8" />
+          <Separator
+            orientation="vertical"
+            className="hidden md:block mx-4 h-8"
+          />
 
           {/* Children - for custom content like navigation */}
           {children}
@@ -119,11 +142,19 @@ export function Header({
         </div>
       )}
     </header>
-  )
+  );
 }
 
-export function HeaderLogo({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("font-bold text-xl text-[#4F7FFF]", className)} {...props} />
+export function HeaderLogo({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div
+      className={cn("font-bold text-xl text-[#4F7FFF]", className)}
+      {...props}
+    />
+  );
 }
 
 export function HeaderNavItem({
@@ -132,18 +163,21 @@ export function HeaderNavItem({
   children,
   href,
   ...props
-}: React.HTMLAttributes<HTMLAnchorElement> & { active?: boolean; href: string }) {
+}: React.HTMLAttributes<HTMLAnchorElement> & {
+  active?: boolean;
+  href: string;
+}) {
   return (
     <Link
       href={href}
       className={cn(
         "inline-flex items-center justify-center rounded-radius-03 px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
         active ? "text-text-accent" : "text-text-default hover:bg-bg-light",
-        className,
+        className
       )}
       {...props}
     >
       {children}
     </Link>
-  )
+  );
 }

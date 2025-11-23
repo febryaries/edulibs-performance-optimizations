@@ -249,7 +249,7 @@ function GroupMentorForm({ groupId, initialMentorId }: GroupMentorFormProps) {
                   <PopoverTrigger asChild>
                     <div
                       className={cn(
-                        "flex items-center rounded-md border bg-white cursor-pointer rounded-radius-04",
+                        "flex items-center rounded-md border bg-white cursor-pointer",
                         isOpen
                           ? "border-blue-500 ring-2 ring-blue-200"
                           : "border-gray-300"
@@ -321,7 +321,7 @@ function GroupMentorForm({ groupId, initialMentorId }: GroupMentorFormProps) {
                             usersController.getPaginatedData(params)
                           }
                           value={field.value}
-                          onChange={(value) => {
+                          onChange={(value: string | null) => {
                             field.onChange(value);
                             handleMentorChange(value as string);
                           }}
@@ -579,7 +579,7 @@ export default function GrupePage() {
 
   return (
     <SidebarProvider>
-      <div className="flex h-[calc(100vh-11rem)] overflow-x-hidden">
+      <div className="flex h-[calc(100vh-11rem)]">
         {/* Sidebar for groups - Hidden on mobile */}
         <div className="hidden md:block">
           <InfiniteGroupsSidebar
@@ -589,7 +589,7 @@ export default function GrupePage() {
           />
         </div>
         {/* Main content */}
-        <div className="flex-1 overflow-auto overflow-x-hidden p-4 md:p-6">
+        <div className="flex-1 overflow-auto w-full min-w-0 p-4 md:p-0">
           {/* Mobile Groups Dropdown - Only on mobile, above filters */}
           {isMobile && (
             <div className="mb-4">
@@ -658,17 +658,17 @@ export default function GrupePage() {
           )}
 
           {/* Header with title and actions */}
-          <div className="flex flex-col gap-4 mb-6 md:flex-row md:justify-between md:items-center">
+          <div className="flex flex-col gap-4 mb-6">
             <div className="flex flex-col">
-              <h1 className="text-2xl font-bold">
+              <h1 className="text-xl md:text-2xl font-bold truncate">
                 {selectedGroup
                   ? groups.find((g) => g?.id === selectedGroup)?.name || "Grupe"
                   : "Toate grupele"}
               </h1>
             </div>
-            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-              <div>
-                {selectedGroup && (
+            <div className="flex flex-col gap-3 w-full">
+              {selectedGroup && (
+                <div className="w-full overflow-x-auto">
                   <GroupMentorForm
                     groupId={selectedGroup}
                     initialMentorId={
@@ -676,54 +676,55 @@ export default function GrupePage() {
                         ?.id || ""
                     }
                   />
-                )}
-              </div>
-              <div className="flex flex-col gap-2 md:flex-row md:space-x-4">
+                </div>
+              )}
+              <div className="flex flex-col gap-2 md:flex-row md:flex-wrap md:gap-2">
                 {selectedGroup ? (
                   <>
                     <Button
                       variant="outline"
-                      className="flex items-center justify-center space-x-1 w-full md:w-auto"
+                      className="flex items-center justify-center w-full md:w-auto md:flex-1"
                       onClick={() => setIsAddMemberDialogOpen(true)}
                     >
                       <UserPlus className="h-4 w-4 mr-2" />
-                      Adaugă cursant
+                      <span className="truncate">Adaugă cursant</span>
                     </Button>
 
                     <Button
                       variant="outline"
-                      className="flex items-center justify-center space-x-1 text-red-500 hover:text-red-600 hover:bg-red-50 border-red-200 hover:border-red-300 w-full md:w-auto"
+                      className="flex items-center justify-center text-red-500 hover:text-red-600 hover:bg-red-50 border-red-200 hover:border-red-300 w-full md:w-auto md:flex-1"
                       onClick={() => handleDeleteGroup()}
                     >
                       <Trash2 className="h-4 w-4 mr-2" />
-                      Șterge grupa
+                      <span className="truncate">Șterge grupa</span>
                     </Button>
                   </>
                 ) : (
                   <>
                     <Button
                       variant="outline"
-                      className="flex items-center justify-center space-x-1 w-full md:w-auto"
+                      className="flex items-center justify-center w-full md:w-auto md:flex-1"
                       onClick={() => setIsBulkUploadGroupsDialogOpen(true)}
                     >
                       <Upload className="h-4 w-4 mr-2" />
-                      Adaugă grupe bulk
+                      <span className="truncate">Adaugă grupe bulk</span>
                     </Button>
                     <Button
                       variant="outline"
-                      className="flex items-center justify-center space-x-1 w-full md:w-auto"
+                      className="flex items-center justify-center w-full md:w-auto md:flex-1"
                       onClick={() => setIsBulkUploadMembersDialogOpen(true)}
                     >
                       <Upload className="h-4 w-4 mr-2" />
-                      Adaugă cursanți bulk
+                      <span className="truncate">Adaugă cursanți bulk</span>
                     </Button>
                   </>
                 )}
                 <Button
                   onClick={() => setIsDialogOpen(true)}
-                  className="w-full md:w-auto"
+                  className="w-full md:w-auto md:flex-1"
                 >
-                  <Plus className="mr-2 h-4 w-4" /> Creează grupă
+                  <Plus className="mr-2 h-4 w-4" />{" "}
+                  <span className="truncate">Creează grupă</span>
                 </Button>
               </div>
             </div>
