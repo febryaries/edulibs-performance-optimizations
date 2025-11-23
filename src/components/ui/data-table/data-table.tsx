@@ -722,8 +722,13 @@ export function DataTable<
         </div>
       )}
 
-      {/* Filters Section - Hide on mobile, show in dialog instead */}
-      <div className={cn("mb-6 space-y-4", isMobile && "hidden")}>
+      {/* Filters Section - Hide on mobile, show in dialog instead. Sticky on desktop */}
+      <div
+        className={cn(
+          "mb-6 space-y-4 sticky top-0 z-40 bg-white pb-4 -mx-6 px-6",
+          isMobile && "hidden"
+        )}
+      >
         {/* First row of filters with search and column visibility */}
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex-1 flex flex-wrap gap-3 items-center">
