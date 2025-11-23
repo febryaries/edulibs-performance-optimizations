@@ -1,24 +1,22 @@
-"use client"
+"use client";
 
-import type React from "react"
+import type React from "react";
 
-import { Header } from "@/components/ui/header"
-import { Footer } from "@/components/ui/footer"
-import { HeaderLink } from "@/components/ui/header-link"
-import Image from "next/image"
-import Link from "next/link"
-import useMenu from "@/hooks/use-menu"
+import { Header } from "@/components/ui/header";
+import { Footer } from "@/components/ui/footer";
+import { HeaderLink } from "@/components/ui/header-link";
+import Image from "next/image";
+import Link from "next/link";
+import useMenu from "@/hooks/use-menu";
 
 export default function DashboardLayout({
   children,
 }: Readonly<{
-  children: React.ReactNode
+  children: React.ReactNode;
 }>) {
-  const {
-    menuItems,
-  } = useMenu();
+  const { menuItems } = useMenu();
   return (
-    <div className="min-h-screen flex flex-col bg-lightest dark:bg-lightest">
+    <div className="min-h-screen flex flex-col bg-lightest dark:bg-lightest overflow-x-hidden">
       {/* Header */}
       <Header
         logo={
@@ -47,7 +45,13 @@ export default function DashboardLayout({
       >
         <div className="hidden md:flex items-center space-x-1">
           {menuItems.map((item) => (
-            <HeaderLink key={item.key} href={item.href} active={item.active} icon={item.icon} count={item.count}>
+            <HeaderLink
+              key={item.key}
+              href={item.href}
+              active={item.active}
+              icon={item.icon}
+              count={item.count}
+            >
               {item.label}
             </HeaderLink>
           ))}
@@ -55,9 +59,9 @@ export default function DashboardLayout({
       </Header>
 
       {/* Main content */}
-      <div className="flex flex-1 relative z-10">
+      <div className="flex flex-1 relative z-10 overflow-x-hidden">
         {/* Page content */}
-        <main className="flex-1 p-4 md:p-6">{children}</main>
+        <main className="flex-1 p-4 md:p-6 overflow-x-hidden">{children}</main>
       </div>
 
       {/* Footer */}
@@ -67,7 +71,9 @@ export default function DashboardLayout({
         companyName="EDUAPPS"
         navItems={[
           {
-            href: `mailto:${process.env.NEXT_PUBLIC_SUPPORT_EMAIL || "support@eduapps.com"}`,
+            href: `mailto:${
+              process.env.NEXT_PUBLIC_SUPPORT_EMAIL || "support@eduapps.com"
+            }`,
             label: "Contact",
           },
           {
@@ -81,5 +87,5 @@ export default function DashboardLayout({
         ]}
       />
     </div>
-  )
+  );
 }

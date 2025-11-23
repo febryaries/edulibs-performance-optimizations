@@ -711,7 +711,7 @@ export function DataTable<
     <div className={cn("space-y-4", className)}>
       {/* Sticky Filter Button (Mobile Only) */}
       {isMobile && (
-        <div className="sticky top-0 z-50 bg-white shadow-md p-3 mb-4">
+        <div className="sticky top-0 z-50 bg-white -mx-4 px-4 mb-4">
           <Button
             onClick={() => setMobileFiltersOpen(true)}
             className="w-full bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center gap-2"
@@ -895,7 +895,7 @@ export function DataTable<
 
       {/* Mobile Card View or Desktop Table View */}
       {isMobile ? (
-        <div className="space-y-4">
+        <div className="space-y-4 overflow-x-hidden">
           {renderMobileCards()}
 
           {/* Pagination for mobile */}
