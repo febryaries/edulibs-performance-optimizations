@@ -50,6 +50,12 @@ export async function GET() {
       data: { user },
     } = await supabase.auth.getUser();
 
+    console.log("[API] User authentication check:", {
+      hasUser: !!user,
+      userId: user?.id,
+      userEmail: user?.email,
+    });
+
     if (!user) {
       console.warn("[API] No authenticated user - returning cached or 0");
       isRefreshing = false;
@@ -60,6 +66,8 @@ export async function GET() {
         { status: 200 }
       );
     }
+
+    console.log("[API] User authenticated, fetching counts...");
 
     // Facem toate count-urile în paralel (mai rapid decât secvențial)
     refreshPromise = Promise.all([
